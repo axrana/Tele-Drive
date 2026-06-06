@@ -17,6 +17,42 @@ import com.example.teledrive.viewmodel.FileExplorerViewModel
 import com.example.teledrive.viewmodel.LoginViewModel
 import com.example.teledrive.worker.TeleDriveWorkerFactory
 
+@Composable
+fun LoginEffect(viewModel: LoginViewModel, tdManager: com.example.teledrive.tdlib.TdLibraryManager) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.errorFlow.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
+    LaunchedEffect(Unit) {
+        tdManager.errorFlow.collect { Toast.makeText(context, "Telegram: $it", Toast.LENGTH_LONG).show() }
+    }
+}
+
+@Composable
+fun ExplorerEffect(viewModel: FileExplorerViewModel, tdManager: com.example.teledrive.tdlib.TdLibraryManager) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.errorFlow.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
+    LaunchedEffect(Unit) {
+        tdManager.errorFlow.collect { Toast.makeText(context, "Telegram: $it", Toast.LENGTH_LONG).show() }
+    }
+}
+
+class TeleDriveViewModelFactory(
+    private val tdManager: com.example.teledrive.tdlib.TdLibraryManager,
+    private val repository: com.example.teledrive.data.repository.TeleDriveRepository
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        return when {
+            modelClass.isAssignableFrom(LoginViewModel::class.java) -> LoginViewModel(tdManager, repository) as T
+            modelClass.isAssignableFrom(FileExplorerViewModel::class.java) -> FileExplorerViewModel(tdManager, repository) as T
+            else -> throw IllegalArgumentException("Unknown ViewModel class")
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,49 +73,18 @@ class MainActivity : ComponentActivity() {
                 NavHost(navController = navController, startDestination = if (userSession != null) "explorer" else "login") {
                     composable("login") {
                         val loginViewModel: LoginViewModel = viewModel(
-                            factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-                                @Suppress("UNCHECKED_CAST")
-                                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                                    return LoginViewModel(tdLibraryManager, repository) as T
-                                }
-                            }
+                            factory = TeleDriveViewModelFactory(tdLibraryManager, repository)
                         )
 
-                        LaunchedEffect(Unit) {
-                            loginViewModel.errorFlow.collect { message ->
-                                Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
-                            }
-                        }
-
-                        LaunchedEffect(Unit) {
-                            tdLibraryManager.errorFlow.collect { message ->
-                                Toast.makeText(applicationContext, "Telegram Error: $message", Toast.LENGTH_LONG).show()
-                            }
-                        }
-
+                        LoginEffect(loginViewModel, tdLibraryManager)
                         LoginScreen(loginViewModel)
                     }
                     composable("explorer") {
                         val explorerViewModel: FileExplorerViewModel = viewModel(
-                            factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-                                @Suppress("UNCHECKED_CAST")
-                                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                                    return FileExplorerViewModel(tdLibraryManager, repository) as T
-                                }
-                            }
+                            factory = TeleDriveViewModelFactory(tdLibraryManager, repository)
                         )
 
-                        LaunchedEffect(Unit) {
-                            explorerViewModel.errorFlow.collect { message ->
-                                Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
-                            }
-                        }
-
-                        LaunchedEffect(Unit) {
-                            tdLibraryManager.errorFlow.collect { message ->
-                                Toast.makeText(applicationContext, "Telegram Error: $message", Toast.LENGTH_LONG).show()
-                            }
-                        }
+                        ExplorerEffect(explorerViewModel, tdLibraryManager)
 
                         FileExplorerScreen(
                             viewModel = explorerViewModel,

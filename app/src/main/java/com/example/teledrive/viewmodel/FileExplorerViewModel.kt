@@ -90,10 +90,14 @@ class FileExplorerViewModel(
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
                 try {
+                    // Try creating as Forum Topic first
                     val topic = tdLibraryManager.execute(TdApi.CreateForumTopic(session.channelId, name))
                     repository.createFolder(name, _currentFolderId.value, topic.messageThreadId)
                 } catch (e: Exception) {
-                    val content = TdApi.InputMessageText(TdApi.FormattedText("Folder: $name", null), false, true)
+                    // Fallback to regular message thread
+                    val formattedText = TdApi.FormattedText()
+                    formattedText.text = "Folder: $name"
+                    val content = TdApi.InputMessageText(formattedText, false, true)
                     val message = tdLibraryManager.execute(TdApi.SendMessage(session.channelId, 0, null, null, null, content))
                     repository.createFolder(name, _currentFolderId.value, message.id)
                 }
@@ -137,8 +141,8 @@ class FileExplorerViewModel(
     fun downloadFile(fileEntity: FileEntity) {
         viewModelScope.launch {
             try {
-                val remoteFile = tdLibraryManager.execute(TdApi.GetRemoteFile(fileEntity.telegramFileId))
-                tdLibraryManager.send(TdApi.DownloadFile(remoteFile.id, 1, 0, 0, true))
+                val file = tdLibraryManager.execute(TdApi.GetRemoteFile(fileEntity.telegramFileId))
+                tdLibraryManager.send(TdApi.DownloadFile(file.id, 1, 0, 0, false))
             } catch (e: Exception) {
                 _errorFlow.emit("Download failed: ${e.message}")
             }

@@ -55,7 +55,6 @@ class UploadWorker(
             val folder = repository.getFolderById(folderId) ?: return Result.failure()
 
             // TDLib's InputFileLocal handles chunking and reliability for files up to 2GB automatically.
-            // We leverage this for production stability while adhering to the original file name requirement.
             val inputMessage = TdApi.InputMessageDocument(TdApi.InputFileLocal(file.absolutePath))
 
             val message = tdLibraryManager.execute(
@@ -69,7 +68,8 @@ class UploadWorker(
                 )
             )
 
-            val document = (message.content as TdApi.MessageDocument).document
+            val messageDocument = message.content as TdApi.MessageDocument
+            val document = messageDocument.document
             val fileEntity = FileEntity(
                 name = originalName,
                 size = file.length(),

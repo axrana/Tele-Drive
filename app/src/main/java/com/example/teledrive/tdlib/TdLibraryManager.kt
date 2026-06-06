@@ -47,20 +47,26 @@ class TdLibraryManager(private val context: Context) {
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
         when (state) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> {
-                val parameters = TdApi.TdlibParameters().apply {
-                    apiId = context.getString(R.string.telegram_api_id).toInt()
-                    apiHash = context.getString(R.string.telegram_api_hash)
-                    useTestDc = false
-                    databaseDirectory = File(context.filesDir, "tdlib").absolutePath
-                    filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
-                    useFileDatabase = true
-                    useChatInfoDatabase = true
-                    useMessageDatabase = true
-                    systemLanguageCode = "en"
-                    deviceModel = "Android"
-                    systemVersion = "TeleDrive"
-                    applicationVersion = "1.0"
+                val parameters = TdApi.TdlibParameters()
+                val apiIdString = context.getString(R.string.telegram_api_id)
+                parameters.apiId = try {
+                    apiIdString.toInt()
+                } catch (e: NumberFormatException) {
+                    // Fallback or handle placeholder state
+                    0
                 }
+                parameters.apiHash = context.getString(R.string.telegram_api_hash)
+                parameters.useTestDc = false
+                parameters.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
+                parameters.filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
+                parameters.useFileDatabase = true
+                parameters.useChatInfoDatabase = true
+                parameters.useMessageDatabase = true
+                parameters.systemLanguageCode = "en"
+                parameters.deviceModel = "Android"
+                parameters.systemVersion = "TeleDrive"
+                parameters.applicationVersion = "1.0"
+
                 send(TdApi.SetTdlibParameters(parameters))
             }
             is TdApi.AuthorizationStateWaitEncryptionKey -> {

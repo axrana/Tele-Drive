@@ -48,21 +48,6 @@ public final class Client {
     }
 
     /**
-     * Interface for handler of messages that are added to the internal TDLib log.
-     */
-    public interface LogMessageHandler {
-        /**
-         * Callback called on messages that are added to the internal TDLib log.
-         *
-         * @param verbosityLevel Log verbosity level with which the message was added from -1 up to 1024.
-         *                       If 0, then TDLib will crash as soon as the callback returns.
-         *                       None of the TDLib methods can be called from the callback.
-         * @param message        The message added to the internal TDLib log.
-         */
-        void onLogMessage(int verbosityLevel, String message);
-    }
-
-    /**
      * Exception class thrown when TDLib error occurred while performing {@link #execute(TdApi.Function)}.
      */
     public static class ExecutionException extends Exception {
@@ -100,19 +85,7 @@ public final class Client {
     }
 
     /**
-     * Sends a request to the TDLib with an empty ExceptionHandler.
-     *
-     * @param query         Object representing a query to the TDLib.
-     * @param resultHandler Result handler with onResult method which will be called with result
-     *                      of the query or with TdApi.Error as parameter. If it is null, then
-     *                      defaultExceptionHandler will be called.
-     */
-    public void send(TdApi.Function query, ResultHandler resultHandler) {
-        send(query, resultHandler, null);
-    }
-
-    /**
-     * Synchronously executes a TDLib request. Only a few marked accordingly requests can be executed synchronously.
+     * Synchronously executes a TDLib request.
      *
      * @param query Object representing a query to the TDLib.
      * @param <T> Automatically deduced return type of the query.
@@ -150,24 +123,13 @@ public final class Client {
         return client;
     }
 
-    /**
-     * Sets the handler for messages that are added to the internal TDLib log.
-     * None of the TDLib methods can be called from the callback.
-     *
-     * @param maxVerbosityLevel The maximum verbosity level of messages for which the callback will be called.
-     * @param logMessageHandler Handler for messages that are added to the internal TDLib log. Pass null to remove the handler.
-     */
-    public static void setLogMessageHandler(int maxVerbosityLevel, Client.LogMessageHandler logMessageHandler) {
-        nativeClientSetLogMessageHandler(maxVerbosityLevel, logMessageHandler);
-    }
-
     private static class ResponseReceiver implements Runnable {
         public boolean isRun = false;
 
         @Override
         public void run() {
             while (true) {
-                int resultN = nativeClientReceive(clientIds, eventIds, events, 100000.0 /*seconds*/);
+                int resultN = nativeClientReceive(clientIds, eventIds, events, 10.0 /*seconds*/);
                 for (int i = 0; i < resultN; i++) {
                     processResult(clientIds[i], eventIds[i], events[i]);
                     events[i] = null;
@@ -203,8 +165,8 @@ public final class Client {
             }
 
             if (isClosed) {
-                updateHandlers.remove(clientId);           // there will be no more updates
-                defaultExceptionHandlers.remove(clientId); // ignore further exceptions
+                updateHandlers.remove(clientId);
+                defaultExceptionHandlers.remove(clientId);
                 clientCount.decrementAndGet();
             }
         }
@@ -244,7 +206,6 @@ public final class Client {
         if (defaultExceptionHandler != null) {
             defaultExceptionHandlers.put(nativeClientId, defaultExceptionHandler);
         }
-        send(new TdApi.GetOption("version"), null, null);
     }
 
     private static native int createNativeClient();
@@ -254,6 +215,4 @@ public final class Client {
     private static native int nativeClientReceive(int[] clientIds, long[] eventIds, TdApi.Object[] events, double timeout);
 
     private static native TdApi.Object nativeClientExecute(TdApi.Function function);
-
-    private static native void nativeClientSetLogMessageHandler(int maxVerbosityLevel, LogMessageHandler logMessageHandler);
 }

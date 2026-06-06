@@ -14,7 +14,8 @@ class TeleDriveRepository(
     private val userSessionDao: UserSessionDao,
     private val folderDao: FolderDao,
     private val fileDao: FileDao,
-    private val shareTokenDao: ShareTokenDao
+    private val shareTokenDao: ShareTokenDao,
+    private val settingsDao: com.example.teledrive.data.local.dao.SettingsDao
 ) {
     // User Session
     fun getUserSession(): Flow<UserSession?> = userSessionDao.getUserSession()
@@ -41,4 +42,8 @@ class TeleDriveRepository(
         return shareTokenDao.createShareToken(shareToken)
     }
     suspend fun getShareToken(token: String) = shareTokenDao.getShareToken(token)
+
+    // Settings
+    fun getSettings(): Flow<com.example.teledrive.data.local.entity.Settings?> = settingsDao.getSettings()
+    suspend fun saveSettings(settings: com.example.teledrive.data.local.entity.Settings) = settingsDao.saveSettings(settings)
 }

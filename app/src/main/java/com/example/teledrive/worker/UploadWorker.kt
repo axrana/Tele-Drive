@@ -11,7 +11,6 @@ import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.repository.TeleDriveRepository
 import com.example.teledrive.tdlib.TdLibraryManager
 import com.example.teledrive.util.ImageCompressor
-import com.example.teledrive.tdlib.ChunkUploader
 import org.drinkless.tdlib.TdApi
 import java.io.File
 

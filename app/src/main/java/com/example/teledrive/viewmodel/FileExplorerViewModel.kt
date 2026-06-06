@@ -12,6 +12,7 @@ import com.example.teledrive.data.local.entity.Folder
 import com.example.teledrive.data.repository.TeleDriveRepository
 import com.example.teledrive.tdlib.TdLibraryManager
 import com.example.teledrive.worker.UploadWorker
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.drinkless.tdlib.TdApi
@@ -39,13 +40,16 @@ class FileExplorerViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val files = combine(_currentFolderId, _searchQuery) { folderId, query ->
+        query to folderId
+    }.flatMapLatest { (query, folderId) ->
         if (query.isNotEmpty()) {
-            repository.searchFiles(query).first()
+            repository.searchFiles(query)
         } else if (folderId != null) {
-            repository.getFiles(folderId).first()
+            repository.getFiles(folderId)
         } else {
-            emptyList()
+            flowOf(emptyList())
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -90,7 +94,7 @@ class FileExplorerViewModel(
                     repository.createFolder(name, _currentFolderId.value, topic.messageThreadId)
                 } catch (e: Exception) {
                     val content = TdApi.InputMessageText(TdApi.FormattedText("Folder: $name", null), false, true)
-                    val message = tdLibraryManager.execute(TdApi.SendMessage(session.channelId, 0, content))
+                    val message = tdLibraryManager.execute(TdApi.SendMessage(session.channelId, 0, null, null, null, content))
                     repository.createFolder(name, _currentFolderId.value, message.id)
                 }
             } catch (e: Exception) {

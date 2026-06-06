@@ -92,7 +92,10 @@ class TdLibraryManager(private val context: Context) {
     }
 
     fun setPhoneNumber(phoneNumber: String) {
-        send(TdApi.SetAuthenticationPhoneNumber(phoneNumber, null))
+        val settings = TdApi.PhoneNumberAuthenticationSettings()
+        settings.allowFlashCall = false
+        settings.allowSmsRetrieverApi = false
+        send(TdApi.SetAuthenticationPhoneNumber(phoneNumber, settings))
     }
 
     fun checkCode(code: String) {

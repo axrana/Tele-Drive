@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.teledrive.ui.screens.FileExplorerScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.teledrive.ui.screens.LoginScreen
 import com.example.teledrive.ui.screens.SettingsScreen
 import com.example.teledrive.ui.theme.TeleDriveTheme
@@ -35,7 +36,13 @@ class MainActivity : ComponentActivity() {
 
                 NavHost(navController = navController, startDestination = if (userSession != null) "explorer" else "login") {
                     composable("login") {
-                        val loginViewModel = LoginViewModel(tdLibraryManager, repository)
+                        val loginViewModel: LoginViewModel = viewModel(
+                            factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                                    return LoginViewModel(tdLibraryManager, repository) as T
+                                }
+                            }
+                        )
 
                         LaunchedEffect(Unit) {
                             loginViewModel.errorFlow.collect { message ->
@@ -52,7 +59,13 @@ class MainActivity : ComponentActivity() {
                         LoginScreen(loginViewModel)
                     }
                     composable("explorer") {
-                        val explorerViewModel = FileExplorerViewModel(tdLibraryManager, repository)
+                        val explorerViewModel: FileExplorerViewModel = viewModel(
+                            factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                                    return FileExplorerViewModel(tdLibraryManager, repository) as T
+                                }
+                            }
+                        )
 
                         LaunchedEffect(Unit) {
                             explorerViewModel.errorFlow.collect { message ->
@@ -73,18 +86,21 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("settings") {
-                        val explorerViewModel = FileExplorerViewModel(tdLibraryManager, repository)
+                        val scope = rememberCoroutineScope()
                         SettingsScreen(
                             settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
                             onSettingsChange = { newSettings ->
-                                kotlinx.coroutines.MainScope().launch {
+                                scope.launch {
                                     repository.saveSettings(newSettings)
                                 }
                             },
                             onLogout = {
-                                explorerViewModel.logOut()
-                                navController.navigate("login") {
-                                    popUpTo("explorer") { inclusive = true }
+                                scope.launch {
+                                    tdLibraryManager.logOut()
+                                    repository.clearSession()
+                                    navController.navigate("login") {
+                                        popUpTo("explorer") { inclusive = true }
+                                    }
                                 }
                             },
                             onBack = { navController.popBackStack() }

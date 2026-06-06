@@ -70,7 +70,7 @@ class LoginViewModel(
         val localSession = repository.getUserSession().firstOrNull()
 
         if (localSession == null) {
-            val chats = tdLibraryManager.execute(TdApi.GetChats(100))
+            val chats = tdLibraryManager.execute(TdApi.GetChats(TdApi.ChatListMain(), 100))
             var existingChannelId: Long? = null
 
             if (chats.chatIds != null) {

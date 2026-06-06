@@ -35,6 +35,9 @@ class UploadWorker(
         var file = File(filePath)
         if (!file.exists()) return Result.failure()
 
+        val originalName = file.name
+        val originalExtension = file.extension
+
         // Size check (Max 2GB)
         if (file.length() > 2L * 1024 * 1024 * 1024) return Result.failure()
 
@@ -59,17 +62,19 @@ class UploadWorker(
                 TdApi.SendMessage(
                     session.channelId,
                     folder.telegramThreadMsgId,
-                    null, null, null,
+                    null,
+                    null,
+                    null,
                     inputMessage
                 )
             )
 
             val document = (message.content as TdApi.MessageDocument).document
             val fileEntity = FileEntity(
-                name = file.name,
+                name = originalName,
                 size = file.length(),
                 mimeType = document.mimeType,
-                extension = file.extension,
+                extension = originalExtension,
                 telegramMsgId = message.id,
                 telegramFileId = document.document.remote.id,
                 folderId = folderId,

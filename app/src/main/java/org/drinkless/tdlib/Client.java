@@ -28,7 +28,7 @@ public final class Client {
         /**
          * Callback called on result of query to TDLib or incoming update from TDLib.
          *
-         * @param object Result of query or update of type TdApi.Update about new events.
+         * @param object Result of query or update of type TdApi.Object about new events.
          */
         void onResult(TdApi.Object object);
     }
@@ -133,6 +133,14 @@ public final class Client {
                 for (int i = 0; i < resultN; i++) {
                     processResult(clientIds[i], eventIds[i], events[i]);
                     events[i] = null;
+                }
+                if (clientCount.get() == 0) {
+                    synchronized (responseReceiver) {
+                        if (clientCount.get() == 0) {
+                            isRun = false;
+                            return;
+                        }
+                    }
                 }
             }
         }

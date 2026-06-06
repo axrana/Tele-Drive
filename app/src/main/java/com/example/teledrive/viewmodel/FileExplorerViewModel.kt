@@ -46,10 +46,8 @@ class FileExplorerViewModel(
     }.flatMapLatest { (query, folderId) ->
         if (query.isNotEmpty()) {
             repository.searchFiles(query)
-        } else if (folderId != null) {
-            repository.getFiles(folderId)
         } else {
-            flowOf(emptyList())
+            repository.getFiles(folderId)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

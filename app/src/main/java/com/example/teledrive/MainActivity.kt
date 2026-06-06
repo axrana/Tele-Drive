@@ -26,18 +26,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val db = Room.databaseBuilder(applicationContext, TeleDriveDatabase::class.java, "teledrive.db").build()
-        val repository = TeleDriveRepository(db.userSessionDao(), db.folderDao(), db.fileDao(), db.shareTokenDao())
-        val tdLibraryManager = TdLibraryManager(applicationContext)
-
-        // Initialize WorkManager with custom factory
-        val workerFactory = TeleDriveWorkerFactory(tdLibraryManager, repository)
-        val config = Configuration.Builder().setWorkerFactory(workerFactory).build()
-        try {
-            WorkManager.initialize(applicationContext, config)
-        } catch (e: Exception) {
-            // Already initialized
-        }
+        val app = application as TeleDriveApplication
+        val repository = app.repository
+        val tdLibraryManager = app.tdLibraryManager
 
         setContent {
             TeleDriveTheme {
@@ -48,6 +39,13 @@ class MainActivity : ComponentActivity() {
                 NavHost(navController = navController, startDestination = if (userSession != null) "explorer" else "login") {
                     composable("login") {
                         val loginViewModel = LoginViewModel(tdLibraryManager, repository)
+
+                        LaunchedEffect(Unit) {
+                            loginViewModel.errorFlow.collect { message ->
+                                Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+                            }
+                        }
+
                         LoginScreen(loginViewModel)
                     }
                     composable("explorer") {

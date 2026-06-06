@@ -14,6 +14,9 @@ class TdLibraryManager(private val context: Context) {
     private val _authorizationState = MutableStateFlow<TdApi.AuthorizationState?>(null)
     val authorizationState: StateFlow<TdApi.AuthorizationState?> = _authorizationState.asStateFlow()
 
+    private val _fileUpdates = MutableSharedFlow<TdApi.File>(extraBufferCapacity = 64)
+    val fileUpdates: SharedFlow<TdApi.File> = _fileUpdates.asSharedFlow()
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     init {
@@ -22,14 +25,19 @@ class TdLibraryManager(private val context: Context) {
 
     private fun initializeClient() {
         client = Client.create({ objectResponse ->
-            if (objectResponse is TdApi.UpdateAuthorizationState) {
-                _authorizationState.value = objectResponse.authorizationState
-                handleAuthorizationState(objectResponse.authorizationState)
+            when (objectResponse) {
+                is TdApi.UpdateAuthorizationState -> {
+                    _authorizationState.value = objectResponse.authorizationState
+                    handleAuthorizationState(objectResponse.authorizationState)
+                }
+                is TdApi.UpdateFile -> {
+                    scope.launch { _fileUpdates.emit(objectResponse.file) }
+                }
             }
         }, { error ->
-            // Handle update exception
+            // Update exception handler
         }, { error ->
-            // Handle default exception
+            // Default exception handler
         })
     }
 

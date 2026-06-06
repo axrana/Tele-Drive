@@ -43,6 +43,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        LaunchedEffect(Unit) {
+                            tdLibraryManager.errorFlow.collect { message ->
+                                Toast.makeText(applicationContext, "Telegram Error: $message", Toast.LENGTH_LONG).show()
+                            }
+                        }
+
                         LoginScreen(loginViewModel)
                     }
                     composable("explorer") {
@@ -51,6 +57,12 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(Unit) {
                             explorerViewModel.errorFlow.collect { message ->
                                 Toast.makeText(applicationContext, message, Toast.LENGTH_LONG).show()
+                            }
+                        }
+
+                        LaunchedEffect(Unit) {
+                            tdLibraryManager.errorFlow.collect { message ->
+                                Toast.makeText(applicationContext, "Telegram Error: $message", Toast.LENGTH_LONG).show()
                             }
                         }
 

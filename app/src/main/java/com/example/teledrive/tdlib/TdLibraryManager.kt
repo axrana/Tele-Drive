@@ -11,6 +11,9 @@ import java.io.File
 class TdLibraryManager(private val context: Context) {
     private var client: Client? = null
 
+    private val _errorFlow = MutableSharedFlow<String>(extraBufferCapacity = 10)
+    val errorFlow: SharedFlow<String> = _errorFlow.asSharedFlow()
+
     private val _authorizationState = MutableStateFlow<TdApi.AuthorizationState?>(null)
     val authorizationState: StateFlow<TdApi.AuthorizationState?> = _authorizationState.asStateFlow()
 
@@ -35,9 +38,9 @@ class TdLibraryManager(private val context: Context) {
                 }
             }
         }, { error ->
-            // Update exception handler
+            scope.launch { _errorFlow.emit("TDLib update error: ${error.message}") }
         }, { error ->
-            // Default exception handler
+            scope.launch { _errorFlow.emit("TDLib general error: ${error.message}") }
         })
     }
 
@@ -74,18 +77,22 @@ class TdLibraryManager(private val context: Context) {
     }
 
     suspend fun <T : TdApi.Object> execute(query: TdApi.Function<T>): T = suspendCancellableCoroutine { continuation ->
-        client?.send(query) { result ->
-            if (result is TdApi.Error) {
-                continuation.resumeWith(Result.failure(Exception("${result.code}: ${result.message}")))
-            } else {
-                @Suppress("UNCHECKED_CAST")
-                continuation.resume(result as T)
+        try {
+            client?.send(query) { result ->
+                if (result is TdApi.Error) {
+                    continuation.resumeWith(Result.failure(Exception("${result.code}: ${result.message}")))
+                } else {
+                    @Suppress("UNCHECKED_CAST")
+                    continuation.resume(result as T)
+                }
             }
+        } catch (e: Exception) {
+            continuation.resumeWith(Result.failure(e))
         }
     }
 
     fun setPhoneNumber(phoneNumber: String) {
-        send(TdApi.SetAuthenticationPhoneNumber(phoneNumber))
+        send(TdApi.SetAuthenticationPhoneNumber(phoneNumber, null))
     }
 
     fun checkCode(code: String) {

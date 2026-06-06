@@ -47,21 +47,24 @@ class LoginViewModel(
     fun submitPhoneNumber(phone: String) {
         _uiState.value = LoginUiState.Loading
         this.phoneNumber = phone
-        try {
-            tdLibraryManager.setPhoneNumber(phone)
-        } catch (e: Exception) {
-            _uiState.value = LoginUiState.WaitPhoneNumber
-            viewModelScope.launch { _errorFlow.emit("Failed to send code: ${e.message}") }
+        val settings = TdApi.PhoneNumberAuthenticationSettings()
+        settings.allowFlashCall = false
+        settings.allowSmsRetrieverApi = false
+        tdLibraryManager.send(TdApi.SetAuthenticationPhoneNumber(phone, settings)) { result ->
+            if (result is TdApi.Error) {
+                _uiState.value = LoginUiState.WaitPhoneNumber
+                viewModelScope.launch { _errorFlow.emit("Failed to send code: ${result.message}") }
+            }
         }
     }
 
     fun submitCode(code: String) {
         _uiState.value = LoginUiState.Loading
-        try {
-            tdLibraryManager.checkCode(code)
-        } catch (e: Exception) {
-            _uiState.value = LoginUiState.WaitCode
-            viewModelScope.launch { _errorFlow.emit("Invalid code: ${e.message}") }
+        tdLibraryManager.send(TdApi.CheckAuthenticationCode(code)) { result ->
+            if (result is TdApi.Error) {
+                _uiState.value = LoginUiState.WaitCode
+                viewModelScope.launch { _errorFlow.emit("Invalid code: ${result.message}") }
+            }
         }
     }
 
@@ -70,13 +73,14 @@ class LoginViewModel(
         val localSession = repository.getUserSession().firstOrNull()
 
         if (localSession == null) {
-            val chats = tdLibraryManager.execute(TdApi.GetChats(TdApi.ChatListMain(), 100))
+            val chatsResponse = tdLibraryManager.execute(TdApi.GetChats(TdApi.ChatListMain(), 100))
             var existingChannelId: Long? = null
 
-            if (chats.chatIds != null) {
-                for (id in chats.chatIds) {
+            val chatIds = chatsResponse.chatIds
+            if (chatIds != null) {
+                for (id in chatIds) {
                     val chat = tdLibraryManager.execute(TdApi.GetChat(id))
-                    if (chat.title.startsWith("My Cloud Storage_")) {
+                    if (chat.title != null && chat.title.startsWith("My Cloud Storage_")) {
                         existingChannelId = chat.id
                         break
                     }
@@ -89,7 +93,12 @@ class LoginViewModel(
                 val randomDigits = (100000..999999).random()
                 val channelTitle = "My Cloud Storage_$randomDigits"
                 val chat = tdLibraryManager.execute(TdApi.CreateNewSupergroupChat(channelTitle, true, "Storage for TeleDrive"))
-                tdLibraryManager.execute(TdApi.ToggleSupergroupIsForum(chat.id, true))
+                // Try to toggle forum, but ignore errors as it might not be supported on all accounts immediately
+                try {
+                    tdLibraryManager.execute(TdApi.ToggleSupergroupIsForum(chat.id, true))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 chat.id
             }
 

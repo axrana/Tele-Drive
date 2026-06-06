@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
                     composable("login") {
                         val loginViewModel: LoginViewModel = viewModel(
                             factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                                @Suppress("UNCHECKED_CAST")
                                 override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                                     return LoginViewModel(tdLibraryManager, repository) as T
                                 }
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     composable("explorer") {
                         val explorerViewModel: FileExplorerViewModel = viewModel(
                             factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                                @Suppress("UNCHECKED_CAST")
                                 override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                                     return FileExplorerViewModel(tdLibraryManager, repository) as T
                                 }

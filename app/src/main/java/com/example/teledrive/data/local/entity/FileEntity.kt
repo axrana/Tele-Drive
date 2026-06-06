@@ -1,0 +1,30 @@
+package com.example.teledrive.data.local.entity
+
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.PrimaryKey
+
+@Entity(
+    tableName = "files",
+    foreignKeys = [
+        ForeignKey(
+            entity = Folder::class,
+            parentColumns = ["id"],
+            childColumns = ["folderId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ]
+)
+data class FileEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val size: Long,
+    val mimeType: String?,
+    val extension: String?,
+    val telegramMsgId: Long,
+    val telegramFileId: String,
+    val folderId: Long,
+    val uploadDate: Long,
+    val isSynced: Boolean = true,
+    val thumbnailPath: String?
+)

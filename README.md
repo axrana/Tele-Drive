@@ -1,1 +1,43 @@
-# Tele-Drive
+# Tele Drive
+
+Tele Drive is a production-ready Android application that uses Telegram as unlimited free cloud storage. It provides a Google Drive-style interface while leveraging Telegram's MTProto API via TDLib.
+
+## Features
+
+- **Multi-user Support**: Each user logs in with their own Telegram account.
+- **Auto-Storage Channel**: Automatically creates a private Telegram channel for storage upon first login.
+- **Google Drive UI**: Clean interface with folders, file grid, and breadcrumb navigation.
+- **Unlimited Storage**: Leverages Telegram's hosting (2GB per file, automatic chunking for larger files).
+- **Offline Support**: Browse your file and folder metadata even without an internet connection.
+- **Search**: Fast, local instant search on file names.
+- **Sharing**: Generate shareable links for files via UUID tokens.
+- **Security**: No backend server; all metadata is stored locally in Room SQLite database.
+
+## Tech Stack
+
+- **Language**: Kotlin
+- **UI**: Jetpack Compose (Material Design 3)
+- **Database**: Room (SQLite)
+- **Telegram Client**: TDLib via JNI
+- **Async**: Coroutines + Flow
+- **Background Tasks**: WorkManager
+- **Image Loading**: Coil
+
+## Setup Instructions
+
+1. **Telegram API Credentials**:
+   - Go to [my.telegram.org](https://my.telegram.org) and create a new application.
+   - Obtain your `api_id` and `api_hash`.
+   - Replace the placeholders in `app/src/main/res/values/strings.xml` with your credentials.
+
+2. **Native Libraries**:
+   - Ensure the TDLib native libraries (`libtdjni.so`) for different ABIs are placed in `app/src/main/jniLibs/`.
+
+3. **Build**:
+   - Open the project in Android Studio.
+   - Sync Gradle and build the project.
+   - Run the app on an Android device (API 24+).
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

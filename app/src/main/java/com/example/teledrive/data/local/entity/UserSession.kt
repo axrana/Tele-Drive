@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "user_session")
 data class UserSession(
-    @PrimaryKey val id: Int = 1,
+    @PrimaryKey val id: Int = 1, // Single user app (local metadata)
     val telegramUserId: Long,
     val phoneNumber: String,
     val username: String?,

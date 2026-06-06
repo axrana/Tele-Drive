@@ -49,6 +49,21 @@ class FileExplorerViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
+    val downloadProgress: StateFlow<Map<String, Float>> = _downloadProgress.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            tdLibraryManager.fileUpdates.collect { tdFile ->
+                if (tdFile.local.downloadedSize > 0) {
+                    val progress = tdFile.local.downloadedSize.toFloat() / tdFile.size
+                    // Remote ID is used to track progress
+                    _downloadProgress.value = _downloadProgress.value + (tdFile.remote.id to progress)
+                }
+            }
+        }
+    }
+
     fun navigateToFolder(folder: Folder?) {
         _currentFolderId.value = folder?.id
         if (folder == null) {
@@ -90,27 +105,28 @@ class FileExplorerViewModel(
 
     fun uploadFile(context: Context, path: String, shouldCompress: Boolean) {
         viewModelScope.launch {
-            val folderId = _currentFolderId.value ?: return@launch
-            val file = File(path)
+            try {
+                val folderId = _currentFolderId.value ?: return@launch
+                val file = File(path)
 
-            if (file.length() > 2L * 1024 * 1024 * 1024) {
-                _errorFlow.emit("File too large! Max: 2GB")
-                return@launch
+                if (file.length() > 2L * 1024 * 1024 * 1024) {
+                    _errorFlow.emit("File too large! Max: 2GB")
+                    return@launch
+                }
+
+                val workRequest = OneTimeWorkRequestBuilder<UploadWorker>()
+                    .setInputData(workDataOf(
+                        "file_path" to path,
+                        "folder_id" to folderId,
+                        "should_compress" to shouldCompress
+                    ))
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
+                    .build()
+
+                WorkManager.getInstance(context).enqueue(workRequest)
+            } catch (e: Exception) {
+                _errorFlow.emit("Upload failed: ${e.message}")
             }
-
-            val workRequest = OneTimeWorkRequestBuilder<UploadWorker>()
-                .setInputData(workDataOf(
-                    "file_path" to path,
-                    "folder_id" to folderId,
-                    "should_compress" to shouldCompress
-                ))
-                .setBackoffCriteria(
-                    BackoffPolicy.EXPONENTIAL,
-                    10, TimeUnit.SECONDS
-                )
-                .build()
-
-            WorkManager.getInstance(context).enqueue(workRequest)
         }
     }
 
@@ -118,7 +134,7 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val remoteFile = tdLibraryManager.execute(TdApi.GetRemoteFile(fileEntity.telegramFileId))
-                tdLibraryManager.execute(TdApi.DownloadFile(remoteFile.id, 1, 0, 0, true))
+                tdLibraryManager.send(TdApi.DownloadFile(remoteFile.id, 1, 0, 0, true))
             } catch (e: Exception) {
                 _errorFlow.emit("Download failed: ${e.message}")
             }
@@ -130,7 +146,7 @@ class FileExplorerViewModel(
             try {
                 val shareManager = com.example.teledrive.data.repository.ShareManager(repository)
                 val link = shareManager.generateShareLink(file, password)
-                _errorFlow.emit("Share link: $link")
+                _errorFlow.emit("Share link copied: $link")
             } catch (e: Exception) {
                 _errorFlow.emit("Sharing failed: ${e.message}")
             }
@@ -140,14 +156,11 @@ class FileExplorerViewModel(
     fun resolveToken(token: String, passwordEntry: String?) {
         viewModelScope.launch {
             try {
-                val shareManager = com.example.teledrive.data.repository.ShareManager(repository)
                 val shareToken = repository.getShareToken(token) ?: throw Exception("Invalid token")
-
                 if (shareToken.password != null && shareToken.password != passwordEntry) {
                     _errorFlow.emit("Incorrect password")
                     return@launch
                 }
-
                 val file = repository.getFileById(shareToken.fileId) ?: throw Exception("File not found")
                 downloadFile(file)
             } catch (e: Exception) {

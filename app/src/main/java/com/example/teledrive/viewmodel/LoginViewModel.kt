@@ -14,6 +14,9 @@ class LoginViewModel(
     private val repository: TeleDriveRepository
 ) : ViewModel() {
 
+    private val _errorFlow = MutableSharedFlow<String>()
+    val errorFlow = _errorFlow.asSharedFlow()
+
     private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Initial)
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
@@ -41,12 +44,22 @@ class LoginViewModel(
 
     fun submitPhoneNumber(phoneNumber: String) {
         _uiState.value = LoginUiState.Loading
-        tdLibraryManager.setPhoneNumber(phoneNumber)
+        try {
+            tdLibraryManager.setPhoneNumber(phoneNumber)
+        } catch (e: Exception) {
+            _uiState.value = LoginUiState.WaitPhoneNumber
+            viewModelScope.launch { _errorFlow.emit("Failed to send code: ${e.message}") }
+        }
     }
 
     fun submitCode(code: String) {
         _uiState.value = LoginUiState.Loading
-        tdLibraryManager.checkCode(code)
+        try {
+            tdLibraryManager.checkCode(code)
+        } catch (e: Exception) {
+            _uiState.value = LoginUiState.WaitCode
+            viewModelScope.launch { _errorFlow.emit("Invalid code: ${e.message}") }
+        }
     }
 
     private suspend fun handleLoginSuccess() {

@@ -79,7 +79,7 @@ public final class Client {
         @Override
         public void run() {
             while (true) {
-                int resultN = nativeClientReceive(clientIds, eventIds, events, 100000.0);
+                int resultN = nativeClientReceive(clientIds, eventIds, events, 1.0); // reduced timeout for responsiveness
                 for (int i = 0; i < resultN; i++) {
                     processResult(clientIds[i], eventIds[i], events[i]);
                     events[i] = null;

@@ -49,12 +49,7 @@ class TdLibraryManager(private val context: Context) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> {
                 val parameters = TdApi.TdlibParameters()
                 val apiIdString = context.getString(R.string.telegram_api_id)
-                parameters.apiId = try {
-                    apiIdString.toInt()
-                } catch (e: NumberFormatException) {
-                    // Fallback or handle placeholder state
-                    0
-                }
+                parameters.apiId = try { apiIdString.toInt() } catch (e: Exception) { 0 }
                 parameters.apiHash = context.getString(R.string.telegram_api_hash)
                 parameters.useTestDc = false
                 parameters.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
@@ -62,10 +57,13 @@ class TdLibraryManager(private val context: Context) {
                 parameters.useFileDatabase = true
                 parameters.useChatInfoDatabase = true
                 parameters.useMessageDatabase = true
+                parameters.useSecretChats = false
                 parameters.systemLanguageCode = "en"
                 parameters.deviceModel = "Android"
                 parameters.systemVersion = "TeleDrive"
                 parameters.applicationVersion = "1.0"
+                parameters.enableStorageOptimizer = true
+                parameters.ignoreFileNames = false
 
                 send(TdApi.SetTdlibParameters(parameters))
             }

@@ -70,13 +70,15 @@ class UploadWorker(
 
             val messageDocument = message.content as TdApi.MessageDocument
             val document = messageDocument.document
+            val telegramFileId = document.document.remote.id
+
             val fileEntity = FileEntity(
                 name = originalName,
                 size = file.length(),
                 mimeType = document.mimeType,
                 extension = originalExtension,
                 telegramMsgId = message.id,
-                telegramFileId = document.document.remote.id,
+                telegramFileId = telegramFileId,
                 folderId = folderId,
                 uploadDate = System.currentTimeMillis(),
                 thumbnailPath = null

@@ -79,10 +79,14 @@ class LoginViewModel(
             val chatIds = chatsResponse.chatIds
             if (chatIds != null) {
                 for (id in chatIds) {
-                    val chat = tdLibraryManager.execute(TdApi.GetChat(id))
-                    if (chat.title != null && chat.title.startsWith("My Cloud Storage_")) {
-                        existingChannelId = chat.id
-                        break
+                    try {
+                        val chat = tdLibraryManager.execute(TdApi.GetChat(id))
+                        if (chat.title != null && chat.title.startsWith("My Cloud Storage_")) {
+                            existingChannelId = chat.id
+                            break
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
             }

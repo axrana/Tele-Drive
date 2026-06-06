@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
         val app = application as TeleDriveApplication
         val repository = app.repository
         val tdLibraryManager = app.tdLibraryManager
+        val viewModelFactory = TeleDriveViewModelFactory(tdLibraryManager, repository)
 
         setContent {
             val persistentSettings by repository.getSettings().collectAsState(initial = null)
@@ -72,20 +73,13 @@ class MainActivity : ComponentActivity() {
 
                 NavHost(navController = navController, startDestination = if (userSession != null) "explorer" else "login") {
                     composable("login") {
-                        val loginViewModel: LoginViewModel = viewModel(
-                            factory = TeleDriveViewModelFactory(tdLibraryManager, repository)
-                        )
-
+                        val loginViewModel: LoginViewModel = viewModel(factory = viewModelFactory)
                         LoginEffect(loginViewModel, tdLibraryManager)
                         LoginScreen(loginViewModel)
                     }
                     composable("explorer") {
-                        val explorerViewModel: FileExplorerViewModel = viewModel(
-                            factory = TeleDriveViewModelFactory(tdLibraryManager, repository)
-                        )
-
+                        val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
                         ExplorerEffect(explorerViewModel, tdLibraryManager)
-
                         FileExplorerScreen(
                             viewModel = explorerViewModel,
                             shouldCompress = shouldCompress,

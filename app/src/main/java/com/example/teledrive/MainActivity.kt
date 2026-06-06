@@ -8,12 +8,6 @@ import androidx.compose.runtime.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.room.Room
-import androidx.work.Configuration
-import androidx.work.WorkManager
-import com.example.teledrive.data.local.TeleDriveDatabase
-import com.example.teledrive.data.repository.TeleDriveRepository
-import com.example.teledrive.tdlib.TdLibraryManager
 import com.example.teledrive.ui.screens.FileExplorerScreen
 import com.example.teledrive.ui.screens.LoginScreen
 import com.example.teledrive.ui.screens.SettingsScreen
@@ -31,10 +25,13 @@ class MainActivity : ComponentActivity() {
         val tdLibraryManager = app.tdLibraryManager
 
         setContent {
-            TeleDriveTheme {
+            val persistentSettings by repository.getSettings().collectAsState(initial = null)
+            val isDarkMode = persistentSettings?.isDarkMode ?: false
+
+            TeleDriveTheme(darkTheme = isDarkMode) {
                 val navController = rememberNavController()
                 val userSession by repository.getUserSession().collectAsState(initial = null)
-                var shouldCompress by remember { mutableStateOf(false) }
+                val shouldCompress = persistentSettings?.shouldCompress ?: false
 
                 NavHost(navController = navController, startDestination = if (userSession != null) "explorer" else "login") {
                     composable("login") {
@@ -64,9 +61,20 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("settings") {
+                        val explorerViewModel = FileExplorerViewModel(tdLibraryManager, repository)
                         SettingsScreen(
-                            shouldCompress = shouldCompress,
-                            onCompressToggle = { shouldCompress = it },
+                            settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
+                            onSettingsChange = { newSettings ->
+                                kotlinx.coroutines.MainScope().launch {
+                                    repository.saveSettings(newSettings)
+                                }
+                            },
+                            onLogout = {
+                                explorerViewModel.logOut()
+                                navController.navigate("login") {
+                                    popUpTo("explorer") { inclusive = true }
+                                }
+                            },
                             onBack = { navController.popBackStack() }
                         )
                     }

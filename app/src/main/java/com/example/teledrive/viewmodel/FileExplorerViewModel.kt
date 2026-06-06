@@ -153,6 +153,17 @@ class FileExplorerViewModel(
         }
     }
 
+    fun logOut() {
+        viewModelScope.launch {
+            try {
+                tdLibraryManager.logOut()
+                repository.clearSession()
+            } catch (e: Exception) {
+                _errorFlow.emit("Logout failed: ${e.message}")
+            }
+        }
+    }
+
     fun resolveToken(token: String, passwordEntry: String?) {
         viewModelScope.launch {
             try {

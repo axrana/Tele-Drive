@@ -20,6 +20,8 @@ class LoginViewModel(
     private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Initial)
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
+    private var phoneNumber: String = ""
+
     init {
         viewModelScope.launch {
             tdLibraryManager.authorizationState.collect { state ->
@@ -42,10 +44,11 @@ class LoginViewModel(
         }
     }
 
-    fun submitPhoneNumber(phoneNumber: String) {
+    fun submitPhoneNumber(phone: String) {
         _uiState.value = LoginUiState.Loading
+        this.phoneNumber = phone
         try {
-            tdLibraryManager.setPhoneNumber(phoneNumber)
+            tdLibraryManager.setPhoneNumber(phone)
         } catch (e: Exception) {
             _uiState.value = LoginUiState.WaitPhoneNumber
             viewModelScope.launch { _errorFlow.emit("Failed to send code: ${e.message}") }
@@ -90,7 +93,7 @@ class LoginViewModel(
 
             val newSession = UserSession(
                 telegramUserId = me.id,
-                phoneNumber = "",
+                phoneNumber = phoneNumber,
                 username = me.username,
                 firstName = me.firstName,
                 lastName = me.lastName,

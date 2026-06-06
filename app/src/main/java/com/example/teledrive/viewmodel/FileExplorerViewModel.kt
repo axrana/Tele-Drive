@@ -90,7 +90,7 @@ class FileExplorerViewModel(
                     repository.createFolder(name, _currentFolderId.value, topic.messageThreadId)
                 } catch (e: Exception) {
                     val content = TdApi.InputMessageText(TdApi.FormattedText("Folder: $name", null), false, true)
-                    val message = tdLibraryManager.execute(TdApi.SendMessage(session.channelId, 0, null, null, null, content))
+                    val message = tdLibraryManager.execute(TdApi.SendMessage(session.channelId, 0, content))
                     repository.createFolder(name, _currentFolderId.value, message.id)
                 }
             } catch (e: Exception) {

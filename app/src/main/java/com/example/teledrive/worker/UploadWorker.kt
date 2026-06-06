@@ -59,7 +59,6 @@ class UploadWorker(
                 TdApi.SendMessage(
                     session.channelId,
                     folder.telegramThreadMsgId,
-                    null, null, null,
                     inputMessage
                 )
             )

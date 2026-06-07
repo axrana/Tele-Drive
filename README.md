@@ -39,6 +39,20 @@ Tele Drive is a production-ready Android application that uses Telegram as unlim
    - Sync Gradle and build the project.
    - Run the app on an Android device (API 24+).
 
+## GitHub Actions Builds
+
+This project includes a CI workflow to automatically build the Android APK.
+
+- **Automated Builds**: Every push to `main` or `master` triggers an APK build.
+- **Manual Builds**: You can trigger a build manually from the **Actions** tab on GitHub by selecting the **Android APK** workflow and clicking **Run workflow**.
+- **Download Artifacts**: Once a workflow run completes, you can download the `TeleDrive-debug-apk` from the **Artifacts** section at the bottom of the run summary page.
+
+### CI Prerequisites
+
+For the CI build to produce a functional APK:
+1.  **Telegram API Credentials**: Ensure `app/src/main/res/values/strings.xml` is updated with valid `api_id` and `api_hash`.
+2.  **Native TDLib Libraries**: The build requires TDLib native binaries (`libtdjni.so`) for target architectures. Note: CI will build the APK, but it will only function correctly if these libraries are present in the repository under `app/src/main/jniLibs/` or provided during the build process.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

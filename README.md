@@ -49,9 +49,21 @@ This project includes a CI workflow to automatically build the Android APK.
 
 ### CI Prerequisites
 
-For the CI build to produce a functional APK:
-1.  **Telegram API Credentials**: Ensure `app/src/main/res/values/strings.xml` is updated with valid `api_id` and `api_hash`.
- 2.  **Native TDLib Libraries**: The build requires TDLib native binaries (`libtdjni.so`) for target architectures. **IMPORTANT: Currently, the native libraries are NOT present in the repository.** While CI will successfully generate a "TeleDrive-debug-apk" artifact, the resulting APK will crash on start due to missing native components. You must manually add `libtdjni.so` to `app/src/main/jniLibs/[abi]/` for a functional build.
+### Production & CI Notes
+
+For the CI build to produce a functional APK and for the app to run on a device:
+
+1.  **Telegram API Credentials**: You must obtain an `api_id` and `api_hash` from [my.telegram.org](https://my.telegram.org). Update the placeholders in `app/src/main/res/values/strings.xml` with your actual credentials.
+2.  **Native TDLib Libraries (Runtime Requirement)**: This app relies on TDLib via JNI. The native binaries (`libtdjni.so`) for target architectures (arm64-v8a, armeabi-v7a, etc.) are **NOT** included in this repository to keep the repo clean.
+    - **CI Status**: The GitHub Actions workflow will successfully build the APK artifact.
+    - **Runtime Status**: The resulting APK will crash on a real device unless you manually add the `libtdjni.so` files to `app/src/main/jniLibs/[abi]/` before building or side-load them if your environment supports it.
+
+### GitHub Actions Builds
+
+This project includes a CI workflow to automatically build the Android APK.
+- **Automated Builds**: Every push to `main` or `master` triggers an APK build.
+- **Manual Builds**: You can trigger a build manually from the **Actions** tab on GitHub.
+- **Download Artifacts**: Once a workflow run completes, you can download the `TeleDrive-debug-apk` from the **Artifacts** section of the run summary.
 
 ## License
 

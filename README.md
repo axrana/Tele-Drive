@@ -51,7 +51,7 @@ This project includes a CI workflow to automatically build the Android APK.
 
 For the CI build to produce a functional APK:
 1.  **Telegram API Credentials**: Ensure `app/src/main/res/values/strings.xml` is updated with valid `api_id` and `api_hash`.
-2.  **Native TDLib Libraries**: The build requires TDLib native binaries (`libtdjni.so`) for target architectures. Note: CI will build the APK, but it will only function correctly if these libraries are present in the repository under `app/src/main/jniLibs/` or provided during the build process.
+ 2.  **Native TDLib Libraries**: The build requires TDLib native binaries (`libtdjni.so`) for target architectures. **IMPORTANT: Currently, the native libraries are NOT present in the repository.** While CI will successfully generate a "TeleDrive-debug-apk" artifact, the resulting APK will crash on start due to missing native components. You must manually add `libtdjni.so` to `app/src/main/jniLibs/[abi]/` for a functional build.
 
 ## License
 

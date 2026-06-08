@@ -41,6 +41,10 @@ android {
         kotlinCompilerExtensionVersion = "1.5.9"
     }
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            pickFirsts += "lib/*/libtdjni.so"
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -49,6 +53,7 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("io.github.tdlibx:td-ktx:1.8.22")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation(platform("androidx.compose:bom:2024.04.01"))

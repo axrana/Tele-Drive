@@ -23,4 +23,7 @@ interface FolderDao {
 
     @Update
     suspend fun updateFolder(folder: Folder)
+
+    @Query("UPDATE folders SET name = :newName WHERE id = :folderId")
+    suspend fun renameFolder(folderId: Long, newName: String)
 }

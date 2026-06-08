@@ -33,6 +33,7 @@ class FileExplorerViewModel(
     private val _breadcrumb = MutableStateFlow<List<Folder>>(emptyList())
     val breadcrumb: StateFlow<List<Folder>> = _breadcrumb.asStateFlow()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val folders = _currentFolderId.flatMapLatest { id ->
         repository.getFolders(id)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -53,6 +54,10 @@ class FileExplorerViewModel(
 
     private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
     val downloadProgress: StateFlow<Map<String, Float>> = _downloadProgress.asStateFlow()
+
+    val totalStorageUsed: StateFlow<Long> = repository.getTotalStorageUsed()
+        .map { it ?: 0L }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     init {
         viewModelScope.launch {
@@ -89,7 +94,7 @@ class FileExplorerViewModel(
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
                 try {
                     // Try creating as Forum Topic first
-                    val topic = tdLibraryManager.execute(TdApi.CreateForumTopic(session.channelId, name))
+                    val topic = tdLibraryManager.execute(TdApi.CreateForumTopic(session.channelId, name, null))
                     repository.createFolder(name, _currentFolderId.value, topic.messageThreadId)
                 } catch (e: Exception) {
                     // Fallback to regular message thread
@@ -182,6 +187,38 @@ class FileExplorerViewModel(
                 downloadFile(file)
             } catch (e: Exception) {
                 _errorFlow.emit("Resolution failed: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteFile(file: FileEntity) {
+        viewModelScope.launch {
+            try {
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+                repository.deleteFileFromTelegram(tdLibraryManager, session.channelId, file.telegramMsgId)
+                repository.deleteFile(file)
+            } catch (e: Exception) {
+                _errorFlow.emit("Delete failed: ${e.message}")
+            }
+        }
+    }
+
+    fun renameFile(file: FileEntity, newName: String) {
+        viewModelScope.launch {
+            try {
+                repository.renameFile(file.id, newName)
+            } catch (e: Exception) {
+                _errorFlow.emit("Rename failed: ${e.message}")
+            }
+        }
+    }
+
+    fun renameFolder(folder: Folder, newName: String) {
+        viewModelScope.launch {
+            try {
+                repository.renameFolder(folder.id, newName)
+            } catch (e: Exception) {
+                _errorFlow.emit("Rename failed: ${e.message}")
             }
         }
     }

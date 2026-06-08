@@ -88,16 +88,14 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
-                try {
-                    val topic = tdLibraryManager.execute(TdApi.CreateForumTopic(session.channelId, name, null))
-                    repository.createFolder(name, _currentFolderId.value, topic.messageThreadId)
-                } catch (e: Exception) {
-                    val formattedText = TdApi.FormattedText()
-                    formattedText.text = "Folder: $name"
-                    val content = TdApi.InputMessageText(formattedText, false, true)
-                    val message = tdLibraryManager.execute(TdApi.SendMessage(session.channelId, 0, null, null, null, content))
-                    repository.createFolder(name, _currentFolderId.value, message.id)
-                }
+                // Send a pinned message to act as a folder marker
+                val formattedText = TdApi.FormattedText()
+                formattedText.text = "📁 Folder: $name"
+                val content = TdApi.InputMessageText(formattedText, false, true)
+                val message = tdLibraryManager.execute(
+                    TdApi.SendMessage(session.channelId, 0, null, null, null, content)
+                )
+                repository.createFolder(name, _currentFolderId.value, message.id)
             } catch (e: Exception) {
                 _errorFlow.emit("Failed to create folder: ${e.message}")
             }
@@ -116,7 +114,13 @@ class FileExplorerViewModel(
                     return@launch
                 }
                 val workRequest = OneTimeWorkRequestBuilder<UploadWorker>()
-                    .setInputData(workDataOf("file_path" to path, "folder_id" to folderId, "should_compress" to shouldCompress))
+                    .setInputData(
+                        workDataOf(
+                            "file_path" to path,
+                            "folder_id" to folderId,
+                            "should_compress" to shouldCompress
+                        )
+                    )
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
                     .build()
                 WorkManager.getInstance(context).enqueue(workRequest)
@@ -142,7 +146,7 @@ class FileExplorerViewModel(
             try {
                 val shareManager = com.example.teledrive.data.repository.ShareManager(repository)
                 val link = shareManager.generateShareLink(file, password)
-                _errorFlow.emit("Share link copied: $link")
+                _errorFlow.emit("Share link: $link")
             } catch (e: Exception) {
                 _errorFlow.emit("Sharing failed: ${e.message}")
             }

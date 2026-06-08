@@ -2,6 +2,7 @@ package com.example.teledrive.tdlib
 
 import android.content.Context
 import com.example.teledrive.R
+import com.example.teledrive.util.TeleDriveLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.drinkless.tdlib.Client
@@ -26,25 +27,37 @@ class TdLibraryManager(private val context: Context) {
         initializeClient()
     }
 
+    @Synchronized
     private fun initializeClient() {
-        client = Client.create({ objectResponse ->
-            when (objectResponse) {
-                is TdApi.UpdateAuthorizationState -> {
-                    _authorizationState.value = objectResponse.authorizationState
-                    handleAuthorizationState(objectResponse.authorizationState)
+        if (client != null) return
+
+        TeleDriveLogger.i("Initializing TDLib Client...")
+        try {
+            client = Client.create({ objectResponse ->
+                when (objectResponse) {
+                    is TdApi.UpdateAuthorizationState -> {
+                        _authorizationState.value = objectResponse.authorizationState
+                        handleAuthorizationState(objectResponse.authorizationState)
+                    }
+                    is TdApi.UpdateFile -> {
+                        scope.launch { _fileUpdates.emit(objectResponse.file) }
+                    }
                 }
-                is TdApi.UpdateFile -> {
-                    scope.launch { _fileUpdates.emit(objectResponse.file) }
-                }
-            }
-        }, { error ->
-            scope.launch { _errorFlow.emit("TDLib update error: ${error.message}") }
-        }, { error ->
-            scope.launch { _errorFlow.emit("TDLib general error: ${error.message}") }
-        })
+            }, { error ->
+                TeleDriveLogger.e("TDLib update error: ${error.message}")
+                scope.launch { _errorFlow.emit("TDLib update error: ${error.message}") }
+            }, { error ->
+                TeleDriveLogger.e("TDLib general error: ${error.message}")
+                scope.launch { _errorFlow.emit("TDLib general error: ${error.message}") }
+            })
+        } catch (e: Throwable) {
+            TeleDriveLogger.e("Failed to create TDLib client", e)
+            scope.launch { _errorFlow.emit("Critical: TDLib init failed") }
+        }
     }
 
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
+        TeleDriveLogger.d("Auth State Changed: ${state.javaClass.simpleName}")
         when (state) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> {
                 val parameters = TdApi.TdlibParameters()
@@ -75,14 +88,39 @@ class TdLibraryManager(private val context: Context) {
     }
 
     fun send(query: TdApi.Function<*>, callback: (TdApi.Object) -> Unit = {}) {
-        client?.send(query) { result ->
+        val currentClient = client
+        if (currentClient == null) {
+            TeleDriveLogger.e("Attempted to send query while client is null: ${query.javaClass.simpleName}. Re-initializing...")
+            initializeClient()
+            client?.send(query) { result -> callback(result) }
+            return
+        }
+        currentClient.send(query) { result ->
             callback(result)
         }
     }
 
     suspend fun <T : TdApi.Object> execute(query: TdApi.Function<T>): T = suspendCancellableCoroutine { continuation ->
         try {
-            client?.send(query) { result ->
+            val currentClient = client
+            if (currentClient == null) {
+                initializeClient()
+                val retryClient = client
+                if (retryClient == null) {
+                    continuation.resumeWith(Result.failure(IllegalStateException("Client is null and could not be initialized")))
+                    return@suspendCancellableCoroutine
+                }
+                retryClient.send(query) { result ->
+                    if (result is TdApi.Error) {
+                        continuation.resumeWith(Result.failure(Exception("${result.code}: ${result.message}")))
+                    } else {
+                        @Suppress("UNCHECKED_CAST")
+                        continuation.resume(result as T)
+                    }
+                }
+                return@suspendCancellableCoroutine
+            }
+            currentClient.send(query) { result ->
                 if (result is TdApi.Error) {
                     continuation.resumeWith(Result.failure(Exception("${result.code}: ${result.message}")))
                 } else {

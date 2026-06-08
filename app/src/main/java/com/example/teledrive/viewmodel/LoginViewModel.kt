@@ -113,30 +113,4 @@ sealed class LoginUiState {
     object WaitCode : LoginUiState()
     object LoggedIn : LoginUiState()
     data class Error(val message: String) : LoginUiState()
-}            }
-
-            val newSession = UserSession(
-                telegramUserId = me.id,
-                phoneNumber = phoneNumber,
-                username = me.usernames?.editableUsername ?: "",
-                firstName = me.firstName,
-                lastName = me.lastName,
-                channelId = channelId,
-                channelUsername = null,
-                isPremium = me.isPremium,
-                loginDate = System.currentTimeMillis()
-            )
-            repository.saveSession(newSession)
-        }
-        _uiState.value = LoginUiState.LoggedIn
-    }
-}
-
-sealed class LoginUiState {
-    object Initial : LoginUiState()
-    object Loading : LoginUiState()
-    object WaitPhoneNumber : LoginUiState()
-    object WaitCode : LoginUiState()
-    object LoggedIn : LoginUiState()
-    data class Error(val message: String) : LoginUiState()
 }

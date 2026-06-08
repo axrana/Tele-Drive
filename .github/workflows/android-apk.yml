@@ -34,3 +34,4 @@ jobs:
         with:
           name: teledrive-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          run: ./gradlew assembleDebug --stacktrace --info 2>&1 | head -200

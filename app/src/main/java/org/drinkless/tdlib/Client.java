@@ -85,6 +85,18 @@ public final class Client {
     }
 
     /**
+     * Sends a request to the TDLib with default exception handler.
+     *
+     * @param query            Object representing a query to the TDLib.
+     * @param resultHandler    Result handler with onResult method which will be called with result
+     *                         of the query or with TdApi.Error as parameter. If it is null, nothing
+     *                         will be called.
+     */
+    public void send(TdApi.Function query, ResultHandler resultHandler) {
+        send(query, resultHandler, null);
+    }
+
+    /**
      * Synchronously executes a TDLib request.
      *
      * @param query Object representing a query to the TDLib.

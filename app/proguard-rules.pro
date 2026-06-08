@@ -14,3 +14,11 @@
 -keep class androidx.room.concurrent.TableWatcher { *; }
 -keep class * extends androidx.room.RoomDatabase
 -dontwarn androidx.room.**
+
+# TDLib JNI preservation
+-keep class org.drinkless.tdlib.** { *; }
+
+# Room Database preservation
+-keepclassmembers class * extends androidx.room.RoomDatabase {
+    <init>(...);
+}

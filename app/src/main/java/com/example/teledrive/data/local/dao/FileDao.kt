@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface FileDao {
     @Query("SELECT * FROM files WHERE folderId = :folderId")
-    fun getFilesInFolder(folderId: Long): Flow<List<FileEntity>>
+    fun getFilesInFolder(folderId: Long?): Flow<List<FileEntity>>
 
     @Query("SELECT * FROM files WHERE id = :id")
     suspend fun getFileById(id: Long): FileEntity?
@@ -23,4 +23,10 @@ interface FileDao {
 
     @Update
     suspend fun updateFile(file: FileEntity)
+
+    @Query("UPDATE files SET name = :newName WHERE id = :fileId")
+    suspend fun renameFile(fileId: Long, newName: String)
+
+    @Query("SELECT SUM(size) FROM files")
+    fun getTotalStorageUsed(): Flow<Long?>
 }

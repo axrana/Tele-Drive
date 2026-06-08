@@ -57,33 +57,31 @@ class TdLibraryManager(private val context: Context) {
     }
 
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
-        TeleDriveLogger.d("Auth State Changed: ${state.javaClass.simpleName}")
         when (state) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> {
-                val parameters = TdApi.TdlibParameters()
-                val apiIdString = context.getString(R.string.telegram_api_id)
-                parameters.apiId = try { apiIdString.toInt() } catch (e: Exception) { 0 }
-                parameters.apiHash = context.getString(R.string.telegram_api_hash)
-                parameters.useTestDc = false
-                parameters.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
-                parameters.filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
-                parameters.useFileDatabase = true
-                parameters.useChatInfoDatabase = true
-                parameters.useMessageDatabase = true
-                parameters.useSecretChats = false
-                parameters.systemLanguageCode = "en"
-                parameters.deviceModel = "Android"
-                parameters.systemVersion = "TeleDrive"
-                parameters.applicationVersion = "1.0"
-                parameters.enableStorageOptimizer = true
-                parameters.ignoreFileNames = false
-
+                val parameters = TdApi.TdlibParameters().apply {
+                    val apiIdString = context.getString(R.string.telegram_api_id)
+                    apiId = try { apiIdString.toInt() } catch (e: Exception) { 0 }
+                    apiHash = context.getString(R.string.telegram_api_hash)
+                    useTestDc = false
+                    databaseDirectory = File(context.filesDir, "tdlib").absolutePath
+                    filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
+                    useFileDatabase = true
+                    useChatInfoDatabase = true
+                    useMessageDatabase = true
+                    useSecretChats = false
+                    systemLanguageCode = "en"
+                    deviceModel = "Android"
+                    systemVersion = "TeleDrive"
+                    applicationVersion = "1.0"
+                    enableStorageOptimizer = true
+                    ignoreFileNames = false
+                }
                 send(TdApi.SetTdlibParameters(parameters))
             }
-            is TdApi.AuthorizationStateWaitEncryptionKey -> {
-                send(TdApi.CheckDatabaseEncryptionKey(byteArrayOf()))
+            else -> {
+                TeleDriveLogger.d("Auth state: ${state::class.java.simpleName}")
             }
-            else -> {}
         }
     }
 

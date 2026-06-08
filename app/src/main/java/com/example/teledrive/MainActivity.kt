@@ -15,7 +15,7 @@ import com.example.teledrive.ui.screens.SettingsScreen
 import com.example.teledrive.ui.theme.TeleDriveTheme
 import com.example.teledrive.viewmodel.FileExplorerViewModel
 import com.example.teledrive.viewmodel.LoginViewModel
-import com.example.teledrive.worker.TeleDriveWorkerFactory
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginEffect(viewModel: LoginViewModel, tdManager: com.example.teledrive.tdlib.TdLibraryManager) {
@@ -58,6 +58,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val app = application as TeleDriveApplication
+        // Basic check for API credentials as Toast already shown in TeleDriveApplication if missing
+        val apiId = getString(R.string.telegram_api_id)
+        val apiHash = getString(R.string.telegram_api_hash)
+        if (apiId == "0" || apiHash == "none") {
+            // Wait for Toast or finish
+            return
+        }
+
         val repository = app.repository
         val tdLibraryManager = app.tdLibraryManager
         val viewModelFactory = TeleDriveViewModelFactory(tdLibraryManager, repository)
@@ -87,8 +95,10 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("settings") {
+                        val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
                         val scope = rememberCoroutineScope()
                         SettingsScreen(
+                            viewModel = explorerViewModel,
                             settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
                             onSettingsChange = { newSettings ->
                                 scope.launch {

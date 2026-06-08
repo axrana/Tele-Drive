@@ -81,7 +81,8 @@ class LoginViewModel(
                 for (id in chatIds) {
                     try {
                         val chat = tdLibraryManager.execute(TdApi.GetChat(id))
-                        if (chat.title != null && chat.title.startsWith("My Cloud Storage_")) {
+                        val title = chat.title ?: ""
+                        if (title.startsWith("My Cloud Storage_")) {
                             existingChannelId = chat.id
                             break
                         }
@@ -109,7 +110,7 @@ class LoginViewModel(
             val newSession = UserSession(
                 telegramUserId = me.id,
                 phoneNumber = phoneNumber,
-                username = me.username,
+                username = me.usernames?.editableUsername ?: "",
                 firstName = me.firstName,
                 lastName = me.lastName,
                 channelId = channelId,

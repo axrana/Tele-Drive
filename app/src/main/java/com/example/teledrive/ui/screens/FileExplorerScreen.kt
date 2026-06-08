@@ -1,6 +1,8 @@
 package com.example.teledrive.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -13,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -99,13 +102,19 @@ fun FileExplorerScreen(viewModel: FileExplorerViewModel, shouldCompress: Boolean
             modifier = Modifier.fillMaxSize()
         ) {
             items(folders) { folder ->
-                FolderItem(folder) { viewModel.navigateToFolder(folder) }
+                FolderItem(
+                    folder = folder,
+                    onClick = { viewModel.navigateToFolder(folder) },
+                    onRename = { newName -> viewModel.renameFolder(folder, newName) }
+                )
             }
             items(files) { file ->
                 FileItem(
                     file = file,
                     onDownload = { viewModel.downloadFile(file) },
-                    onShare = { password -> viewModel.shareFile(file, password) }
+                    onShare = { password -> viewModel.shareFile(file, password) },
+                    onDelete = { viewModel.deleteFile(file) },
+                    onRename = { newName -> viewModel.renameFile(file, newName) }
                 )
             }
         }
@@ -122,21 +131,46 @@ fun FileExplorerScreen(viewModel: FileExplorerViewModel, shouldCompress: Boolean
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FolderItem(folder: Folder, onClick: () -> Unit) {
+fun FolderItem(folder: Folder, onClick: () -> Unit, onRename: (String) -> Unit) {
+    var showMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+
+    if (showRenameDialog) {
+        RenameDialog(
+            currentName = folder.name,
+            onDismiss = { showRenameDialog = false },
+            onConfirm = { newName ->
+                onRename(newName)
+                showRenameDialog = false
+            }
+        )
+    }
+
     Column(
-        modifier = Modifier.padding(8.dp).clickable { onClick() },
+        modifier = Modifier.padding(8.dp).combinedClickable(
+            onClick = onClick,
+            onLongClick = { showMenu = true }
+        ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
         Text(folder.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+
+        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenuItem(text = { Text("Rename") }, onClick = { showRenameDialog = true; showMenu = false })
+        }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileItem(file: FileEntity, onDownload: () -> Unit, onShare: (String?) -> Unit) {
+fun FileItem(file: FileEntity, onDownload: () -> Unit, onShare: (String?) -> Unit, onDelete: () -> Unit, onRename: (String) -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
 
     if (showShareDialog) {
         ShareFileDialog(
@@ -148,8 +182,38 @@ fun FileItem(file: FileEntity, onDownload: () -> Unit, onShare: (String?) -> Uni
         )
     }
 
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete File?") },
+            text = { Text("This will permanently delete ${file.name} from Telegram and cannot be undone.") },
+            confirmButton = {
+                Button(onClick = { onDelete(); showDeleteConfirm = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showRenameDialog) {
+        RenameDialog(
+            currentName = file.name,
+            onDismiss = { showRenameDialog = false },
+            onConfirm = { newName ->
+                onRename(newName)
+                showRenameDialog = false
+            }
+        )
+    }
+
     Column(
-        modifier = Modifier.padding(8.dp).clickable { showMenu = true },
+        modifier = Modifier.padding(8.dp).combinedClickable(
+            onClick = { onDownload() },
+            onLongClick = { showMenu = true }
+        ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (file.thumbnailPath != null) {
@@ -166,8 +230,31 @@ fun FileItem(file: FileEntity, onDownload: () -> Unit, onShare: (String?) -> Uni
         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
             DropdownMenuItem(text = { Text("Download") }, onClick = { onDownload(); showMenu = false })
             DropdownMenuItem(text = { Text("Share") }, onClick = { showShareDialog = true; showMenu = false })
+            DropdownMenuItem(text = { Text("Rename") }, onClick = { showRenameDialog = true; showMenu = false })
+            DropdownMenuItem(
+                text = { Text("Delete", color = Color.Red) },
+                onClick = { showDeleteConfirm = true; showMenu = false }
+            )
         }
     }
+}
+
+@Composable
+fun RenameDialog(currentName: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename") },
+        text = {
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(name) }) { Text("Rename") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable

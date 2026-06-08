@@ -2,6 +2,7 @@ package com.example.teledrive.data.repository
 
 import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.local.entity.UserSession
+import kotlinx.coroutines.flow.firstOrNull
 import java.util.*
 
 class ShareManager(private val repository: TeleDriveRepository) {

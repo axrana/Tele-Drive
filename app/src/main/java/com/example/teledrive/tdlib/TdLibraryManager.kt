@@ -59,25 +59,25 @@ class TdLibraryManager(private val context: Context) {
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
         when (state) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> {
-                val parameters = TdApi.TdlibParameters().apply {
-                    val apiIdString = context.getString(R.string.telegram_api_id)
-                    apiId = try { apiIdString.toInt() } catch (e: Exception) { 0 }
-                    apiHash = context.getString(R.string.telegram_api_hash)
-                    useTestDc = false
-                    databaseDirectory = File(context.filesDir, "tdlib").absolutePath
-                    filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
-                    useFileDatabase = true
-                    useChatInfoDatabase = true
-                    useMessageDatabase = true
-                    useSecretChats = false
-                    systemLanguageCode = "en"
-                    deviceModel = "Android"
-                    systemVersion = "TeleDrive"
-                    applicationVersion = "1.0"
-                    enableStorageOptimizer = true
-                    ignoreFileNames = false
-                }
-                send(TdApi.SetTdlibParameters(parameters))
+    val apiIdString = context.getString(R.string.telegram_api_id)
+    val apiId = try { apiIdString.toInt() } catch (e: Exception) { 0 }
+    send(TdApi.SetTdlibParameters(
+        false,
+        File(context.filesDir, "tdlib").absolutePath,
+        File(context.filesDir, "tdlib_files").absolutePath,
+        null,
+        true,
+        true,
+        true,
+        false,
+        apiId,
+        context.getString(R.string.telegram_api_hash),
+        "en",
+        "Android",
+        "TeleDrive",
+        "1.0"
+    ))
+}
             }
             else -> {
                 TeleDriveLogger.d("Auth state: ${state::class.java.simpleName}")

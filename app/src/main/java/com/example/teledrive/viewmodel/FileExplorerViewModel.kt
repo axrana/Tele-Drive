@@ -15,7 +15,7 @@ import com.example.teledrive.worker.UploadWorker
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import org.drinkless.tdlib.TdApi
+import org.drinkless.td.libcore.telegram.TdApi
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -45,11 +45,8 @@ class FileExplorerViewModel(
     val files = combine(_currentFolderId, _searchQuery) { folderId, query ->
         query to folderId
     }.flatMapLatest { (query, folderId) ->
-        if (query.isNotEmpty()) {
-            repository.searchFiles(query)
-        } else {
-            repository.getFiles(folderId)
-        }
+        if (query.isNotEmpty()) repository.searchFiles(query)
+        else repository.getFiles(folderId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
@@ -64,7 +61,6 @@ class FileExplorerViewModel(
             tdLibraryManager.fileUpdates.collect { tdFile ->
                 if (tdFile.local.downloadedSize > 0) {
                     val progress = tdFile.local.downloadedSize.toFloat() / tdFile.size
-                    // Remote ID is used to track progress
                     _downloadProgress.value = _downloadProgress.value + (tdFile.remote.id to progress)
                 }
             }
@@ -93,11 +89,9 @@ class FileExplorerViewModel(
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
                 try {
-                    // Try creating as Forum Topic first
                     val topic = tdLibraryManager.execute(TdApi.CreateForumTopic(session.channelId, name, null))
                     repository.createFolder(name, _currentFolderId.value, topic.messageThreadId)
                 } catch (e: Exception) {
-                    // Fallback to regular message thread
                     val formattedText = TdApi.FormattedText()
                     formattedText.text = "Folder: $name"
                     val content = TdApi.InputMessageText(formattedText, false, true)
@@ -110,30 +104,21 @@ class FileExplorerViewModel(
         }
     }
 
-    fun updateSearchQuery(query: String) {
-        _searchQuery.value = query
-    }
+    fun updateSearchQuery(query: String) { _searchQuery.value = query }
 
     fun uploadFile(context: Context, path: String, shouldCompress: Boolean) {
         viewModelScope.launch {
             try {
                 val folderId = _currentFolderId.value ?: return@launch
                 val file = File(path)
-
                 if (file.length() > 2L * 1024 * 1024 * 1024) {
                     _errorFlow.emit("File too large! Max: 2GB")
                     return@launch
                 }
-
                 val workRequest = OneTimeWorkRequestBuilder<UploadWorker>()
-                    .setInputData(workDataOf(
-                        "file_path" to path,
-                        "folder_id" to folderId,
-                        "should_compress" to shouldCompress
-                    ))
+                    .setInputData(workDataOf("file_path" to path, "folder_id" to folderId, "should_compress" to shouldCompress))
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
                     .build()
-
                 WorkManager.getInstance(context).enqueue(workRequest)
             } catch (e: Exception) {
                 _errorFlow.emit("Upload failed: ${e.message}")

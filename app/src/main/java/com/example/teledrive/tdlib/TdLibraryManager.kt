@@ -5,8 +5,8 @@ import com.example.teledrive.R
 import com.example.teledrive.util.TeleDriveLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import org.drinkless.tdlib.Client
-import org.drinkless.tdlib.TdApi
+import org.drinkless.td.libcore.telegram.Client
+import org.drinkless.td.libcore.telegram.TdApi
 import java.io.File
 
 class TdLibraryManager(private val context: Context) {
@@ -30,7 +30,6 @@ class TdLibraryManager(private val context: Context) {
     @Synchronized
     private fun initializeClient() {
         if (client != null) return
-
         TeleDriveLogger.i("Initializing TDLib Client...")
         try {
             client = Client.create({ objectResponse ->
@@ -59,24 +58,23 @@ class TdLibraryManager(private val context: Context) {
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
         when (state) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> {
-                val parameters = TdApi.TdlibParameters().apply {
-                    val apiIdString = context.getString(R.string.telegram_api_id)
-                    apiId = try { apiIdString.toInt() } catch (e: Exception) { 0 }
-                    apiHash = context.getString(R.string.telegram_api_hash)
-                    useTestDc = false
-                    databaseDirectory = File(context.filesDir, "tdlib").absolutePath
-                    filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
-                    useFileDatabase = true
-                    useChatInfoDatabase = true
-                    useMessageDatabase = true
-                    useSecretChats = false
-                    systemLanguageCode = "en"
-                    deviceModel = "Android"
-                    systemVersion = "TeleDrive"
-                    applicationVersion = "1.0"
-                    enableStorageOptimizer = true
-                    ignoreFileNames = false
-                }
+                val parameters = TdApi.TdlibParameters()
+                val apiIdString = context.getString(R.string.telegram_api_id)
+                parameters.apiId = try { apiIdString.toInt() } catch (e: Exception) { 0 }
+                parameters.apiHash = context.getString(R.string.telegram_api_hash)
+                parameters.useTestDc = false
+                parameters.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
+                parameters.filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
+                parameters.useFileDatabase = true
+                parameters.useChatInfoDatabase = true
+                parameters.useMessageDatabase = true
+                parameters.useSecretChats = false
+                parameters.systemLanguageCode = "en"
+                parameters.deviceModel = "Android"
+                parameters.systemVersion = "TeleDrive"
+                parameters.applicationVersion = "1.0"
+                parameters.enableStorageOptimizer = true
+                parameters.ignoreFileNames = false
                 send(TdApi.SetTdlibParameters(parameters))
             }
             else -> {
@@ -88,14 +86,12 @@ class TdLibraryManager(private val context: Context) {
     fun send(query: TdApi.Function<*>, callback: (TdApi.Object) -> Unit = {}) {
         val currentClient = client
         if (currentClient == null) {
-            TeleDriveLogger.e("Attempted to send query while client is null: ${query.javaClass.simpleName}. Re-initializing...")
+            TeleDriveLogger.e("Attempted to send query while client is null. Re-initializing...")
             initializeClient()
             client?.send(query) { result -> callback(result) }
             return
         }
-        currentClient.send(query) { result ->
-            callback(result)
-        }
+        currentClient.send(query) { result -> callback(result) }
     }
 
     suspend fun <T : TdApi.Object> execute(query: TdApi.Function<T>): T = suspendCancellableCoroutine { continuation ->
@@ -105,7 +101,7 @@ class TdLibraryManager(private val context: Context) {
                 initializeClient()
                 val retryClient = client
                 if (retryClient == null) {
-                    continuation.resumeWith(Result.failure(IllegalStateException("Client is null and could not be initialized")))
+                    continuation.resumeWith(Result.failure(IllegalStateException("Client is null")))
                     return@suspendCancellableCoroutine
                 }
                 retryClient.send(query) { result ->

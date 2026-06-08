@@ -11,8 +11,7 @@ import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.repository.TeleDriveRepository
 import com.example.teledrive.tdlib.TdLibraryManager
 import com.example.teledrive.util.ImageCompressor
-import kotlinx.coroutines.flow.firstOrNull
-import org.drinkless.tdlib.TdApi
+import org.drinkless.td.libcore.telegram.TdApi
 import java.io.File
 
 class UploadWorker(
@@ -32,20 +31,16 @@ class UploadWorker(
         val shouldCompress = inputData.getBoolean("should_compress", false)
 
         if (folderId == -1L) return Result.failure()
-
         var file = File(filePath)
         if (!file.exists()) return Result.failure()
 
         val originalName = file.name
         val originalExtension = file.extension
 
-        // Size check (Max 2GB)
         if (file.length() > 2L * 1024 * 1024 * 1024) return Result.failure()
 
-        // Image compression
         if (shouldCompress && isImage(file)) {
-            val compressor = ImageCompressor(applicationContext)
-            file = compressor.compressImage(file)
+            file = ImageCompressor(applicationContext).compressImage(file)
         }
 
         createNotificationChannel()
@@ -55,25 +50,16 @@ class UploadWorker(
             val session = repository.getUserSession().firstOrNull() ?: return Result.failure()
             val folder = repository.getFolderById(folderId) ?: return Result.failure()
 
-            // TDLib's InputFileLocal handles chunking and reliability for files up to 2GB automatically.
             val inputMessage = TdApi.InputMessageDocument(TdApi.InputFileLocal(file.absolutePath))
-
             val message = tdLibraryManager.execute(
-                TdApi.SendMessage(
-                    session.channelId,
-                    folder.telegramThreadMsgId,
-                    null,
-                    null,
-                    null,
-                    inputMessage
-                )
+                TdApi.SendMessage(session.channelId, folder.telegramThreadMsgId, null, null, null, inputMessage)
             )
 
             val messageDocument = message.content as TdApi.MessageDocument
             val document = messageDocument.document
             val telegramFileId = document.document.remote.id
 
-            val fileEntity = FileEntity(
+            repository.createFile(FileEntity(
                 name = originalName,
                 size = file.length(),
                 mimeType = document.mimeType,
@@ -83,37 +69,31 @@ class UploadWorker(
                 folderId = folderId,
                 uploadDate = System.currentTimeMillis(),
                 thumbnailPath = null
-            )
-            repository.createFile(fileEntity)
+            ))
 
-            if (file.path.contains(applicationContext.cacheDir.path)) {
-                file.delete()
-            }
-
+            if (file.path.contains(applicationContext.cacheDir.path)) file.delete()
             Result.success()
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 
-    private fun isImage(file: File): Boolean {
-        val extensions = listOf("jpg", "jpeg", "png", "webp")
-        return extensions.contains(file.extension.lowercase())
-    }
+    private fun isImage(file: File) = listOf("jpg", "jpeg", "png", "webp").contains(file.extension.lowercase())
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(channelId, "File Uploads", NotificationManager.IMPORTANCE_LOW)
-        notificationManager.createNotificationChannel(channel)
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channelId, "File Uploads", NotificationManager.IMPORTANCE_LOW)
+        )
     }
 
-    private fun createForegroundInfo(progress: Float, status: String): ForegroundInfo {
-        val notification = NotificationCompat.Builder(applicationContext, channelId)
+    private fun createForegroundInfo(progress: Float, status: String) = ForegroundInfo(
+        notificationId,
+        NotificationCompat.Builder(applicationContext, channelId)
             .setContentTitle("Uploading to Tele Drive")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setProgress(100, (progress * 100).toInt(), false)
             .setOngoing(true)
             .build()
-        return ForegroundInfo(notificationId, notification)
-    }
+    )
 }

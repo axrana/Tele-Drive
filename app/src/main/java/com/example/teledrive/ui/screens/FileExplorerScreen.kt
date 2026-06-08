@@ -50,7 +50,7 @@ fun FileExplorerScreen(viewModel: FileExplorerViewModel, shouldCompress: Boolean
             Column {
                 TopAppBar(
                     title = {
-                        Row(verticalAlignment = Alignment.CenterHorizontally) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Home", modifier = Modifier.clickable { viewModel.navigateToFolder(null) })
                             breadcrumbs.forEach { folder ->
                                 Text(" > ")

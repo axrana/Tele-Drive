@@ -11,6 +11,7 @@ import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.repository.TeleDriveRepository
 import com.example.teledrive.tdlib.TdLibraryManager
 import com.example.teledrive.util.ImageCompressor
+import kotlinx.coroutines.flow.firstOrNull
 import org.drinkless.tdlib.TdApi
 import java.io.File
 

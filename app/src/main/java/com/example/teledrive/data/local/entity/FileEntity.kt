@@ -23,8 +23,8 @@ data class FileEntity(
     val extension: String?,
     val telegramMsgId: Long,
     val telegramFileId: String,
-    val folderId: Long,
+    val folderId: Long?,
     val uploadDate: Long,
     val isSynced: Boolean = true,
-    val thumbnailPath: String?
+    val thumbnailPath: String? = null
 )

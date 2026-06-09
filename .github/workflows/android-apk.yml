@@ -20,18 +20,17 @@ jobs:
 
       - name: Inject API Credentials
         run: |
-          sed -i "s/0/${{ secrets.TELEGRAM_API_ID }}/g" app/src/main/res/values/strings.xml
-          sed -i "s/none/${{ secrets.TELEGRAM_API_HASH }}/g" app/src/main/res/values/strings.xml
+          sed -i "s/YOUR_API_ID_HERE/${{ secrets.TELEGRAM_API_ID }}/g" app/src/main/res/values/strings.xml
+          sed -i "s/YOUR_API_HASH_HERE/${{ secrets.TELEGRAM_API_HASH }}/g" app/src/main/res/values/strings.xml
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: teledrive-debug
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          path: app/build/outputs/apk/debug/app-debug.apk

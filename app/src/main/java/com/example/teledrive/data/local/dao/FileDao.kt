@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FileDao {
-    @Query("SELECT * FROM files WHERE folderId = :folderId")
+    @Query("SELECT * FROM files WHERE folderId IS :folderId")
     fun getFilesInFolder(folderId: Long?): Flow<List<FileEntity>>
 
     @Query("SELECT * FROM files WHERE id = :id")

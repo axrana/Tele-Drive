@@ -18,10 +18,12 @@ class TeleDriveRepository(
     private val shareTokenDao: ShareTokenDao,
     private val settingsDao: com.example.teledrive.data.local.dao.SettingsDao
 ) {
+    // User Session
     fun getUserSession(): Flow<UserSession?> = userSessionDao.getUserSession()
     suspend fun saveSession(session: UserSession) = userSessionDao.insertSession(session)
     suspend fun clearSession() = userSessionDao.clearSession()
 
+    // Folders
     fun getFolders(parentId: Long?): Flow<List<Folder>> = folderDao.getFoldersInParent(parentId)
     suspend fun createFolder(name: String, parentId: Long?, threadId: Long): Long {
         val folder = Folder(name = name, parentFolderId = parentId, telegramThreadMsgId = threadId, createdDate = System.currentTimeMillis())
@@ -31,6 +33,7 @@ class TeleDriveRepository(
     suspend fun renameFolder(id: Long, newName: String) = folderDao.renameFolder(id, newName)
     suspend fun deleteFolder(folder: Folder) = folderDao.deleteFolder(folder)
 
+    // Files
     fun getFiles(folderId: Long?): Flow<List<FileEntity>> = fileDao.getFilesInFolder(folderId)
     fun searchFiles(query: String): Flow<List<FileEntity>> = fileDao.searchFiles(query)
     suspend fun createFile(file: FileEntity) = fileDao.createFile(file)
@@ -39,16 +42,19 @@ class TeleDriveRepository(
     suspend fun deleteFile(file: FileEntity) = fileDao.deleteFile(file)
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
 
+    // Telegram-side delete
     suspend fun deleteFileFromTelegram(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long, messageId: Long) {
         tdLibraryManager.execute(TdApi.DeleteMessages(chatId, longArrayOf(messageId), true))
     }
 
+    // Sharing
     suspend fun createShareToken(fileId: Long, token: String, userId: Long, password: String? = null): Long {
         val shareToken = ShareToken(fileId = fileId, token = token, userId = userId, password = password, createdAt = System.currentTimeMillis(), expiresAt = null)
         return shareTokenDao.createShareToken(shareToken)
     }
     suspend fun getShareToken(token: String) = shareTokenDao.getShareToken(token)
 
+    // Settings
     fun getSettings(): Flow<com.example.teledrive.data.local.entity.Settings?> = settingsDao.getSettings()
     suspend fun saveSettings(settings: com.example.teledrive.data.local.entity.Settings) = settingsDao.saveSettings(settings)
 }

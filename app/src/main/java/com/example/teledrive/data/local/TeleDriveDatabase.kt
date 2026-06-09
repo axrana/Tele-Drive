@@ -6,8 +6,14 @@ import com.example.teledrive.data.local.dao.*
 import com.example.teledrive.data.local.entity.*
 
 @Database(
-    entities = [UserSession::class, Folder::class, FileEntity::class, ShareToken::class, Settings::class],
-    version = 2,
+    entities = [
+        UserSession::class,
+        Folder::class,
+        FileEntity::class,
+        ShareToken::class,
+        Settings::class
+    ],
+    version = 1,
     exportSchema = false
 )
 abstract class TeleDriveDatabase : RoomDatabase() {

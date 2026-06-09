@@ -18,9 +18,9 @@ import androidx.room.PrimaryKey
 data class ShareToken(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val fileId: Long,
-    val token: String, // UUID
+    val token: String,
     val userId: Long,
-    val password: String?,
-    val expiresAt: Long?,
+    val password: String? = null,
+    val expiresAt: Long? = null,
     val createdAt: Long
 )

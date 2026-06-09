@@ -12,7 +12,7 @@
 /captures
 .externalNativeBuild
 .cxx
-/app/build
-
-# Keep the Gradle Wrapper jar
-!gradle/wrapper/gradle-wrapper.jar
+local.properties
+/build
+/*/build
+.gradle

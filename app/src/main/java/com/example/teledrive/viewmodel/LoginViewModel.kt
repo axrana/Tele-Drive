@@ -26,10 +26,18 @@ class LoginViewModel(
         viewModelScope.launch {
             tdLibraryManager.authorizationState.collect { state ->
                 when (state) {
-                    is TdApi.AuthorizationStateWaitPhoneNumber -> _uiState.value = LoginUiState.WaitPhoneNumber
-                    is TdApi.AuthorizationStateWaitCode -> _uiState.value = LoginUiState.WaitCode
-                    is TdApi.AuthorizationStateReady -> handleLoginSuccess()
-                    is TdApi.AuthorizationStateLoggingOut -> _uiState.value = LoginUiState.Loading
+                    is TdApi.AuthorizationStateWaitPhoneNumber -> {
+                        _uiState.value = LoginUiState.WaitPhoneNumber
+                    }
+                    is TdApi.AuthorizationStateWaitCode -> {
+                        _uiState.value = LoginUiState.WaitCode
+                    }
+                    is TdApi.AuthorizationStateReady -> {
+                        handleLoginSuccess()
+                    }
+                    is TdApi.AuthorizationStateLoggingOut -> {
+                        _uiState.value = LoginUiState.Loading
+                    }
                     else -> {}
                 }
             }
@@ -67,17 +75,19 @@ class LoginViewModel(
         if (localSession == null) {
             val chatsResponse = tdLibraryManager.execute(TdApi.GetChats(TdApi.ChatListMain(), 100))
             var existingChannelId: Long? = null
+
             val chatIds = chatsResponse.chatIds
             if (chatIds != null) {
                 for (id in chatIds) {
                     try {
                         val chat = tdLibraryManager.execute(TdApi.GetChat(id))
-                        val title = chat.title ?: ""
-                        if (title.startsWith("My Cloud Storage_")) {
+                        if (chat.title != null && chat.title.startsWith("My Cloud Storage_")) {
                             existingChannelId = chat.id
                             break
                         }
-                    } catch (e: Exception) { e.printStackTrace() }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
 
@@ -85,22 +95,29 @@ class LoginViewModel(
                 existingChannelId
             } else {
                 val randomDigits = (100000..999999).random()
-                val chat = tdLibraryManager.execute(TdApi.CreateNewSupergroupChat("My Cloud Storage_$randomDigits", true, "Storage for TeleDrive"))
-                try { tdLibraryManager.execute(TdApi.ToggleSupergroupIsForum(chat.id, true)) } catch (e: Exception) { e.printStackTrace() }
+                val channelTitle = "My Cloud Storage_$randomDigits"
+                val chat = tdLibraryManager.execute(TdApi.CreateNewSupergroupChat(channelTitle, true, "Storage for TeleDrive"))
+                // Try to toggle forum, but ignore errors as it might not be supported on all accounts immediately
+                try {
+                    tdLibraryManager.execute(TdApi.ToggleSupergroupIsForum(chat.id, true))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 chat.id
             }
 
-            repository.saveSession(UserSession(
+            val newSession = UserSession(
                 telegramUserId = me.id,
                 phoneNumber = phoneNumber,
-                username = me.usernames?.editableUsername ?: "",
+                username = me.username,
                 firstName = me.firstName,
                 lastName = me.lastName,
                 channelId = channelId,
                 channelUsername = null,
                 isPremium = me.isPremium,
                 loginDate = System.currentTimeMillis()
-            ))
+            )
+            repository.saveSession(newSession)
         }
         _uiState.value = LoginUiState.LoggedIn
     }

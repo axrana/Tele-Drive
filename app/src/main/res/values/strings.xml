@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">Tele Drive</string>
-    <!-- Telegram API Credentials from my.telegram.org -->
-    <string name="telegram_api_id">0</string>
-    <string name="telegram_api_hash">none</string>
+    <string name="telegram_api_id">YOUR_API_ID_HERE</string>
+    <string name="telegram_api_hash">YOUR_API_HASH_HERE</string>
 </resources>

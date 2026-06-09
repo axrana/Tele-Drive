@@ -10,7 +10,7 @@ interface ShareTokenDao {
     suspend fun getShareToken(token: String): ShareToken?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun createShareToken(shareToken: ShareToken): Long
+    suspend fun createShareToken(token: ShareToken): Long
 
     @Query("DELETE FROM share_tokens WHERE id = :id")
     suspend fun deleteShareToken(id: Long)

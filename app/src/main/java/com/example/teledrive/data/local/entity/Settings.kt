@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "settings")
 data class Settings(
     @PrimaryKey val id: Int = 1,
+    val isDarkMode: Boolean = false,
     val shouldCompress: Boolean = false,
-    val isDarkMode: Boolean = false
+    val autoUpload: Boolean = false
 )

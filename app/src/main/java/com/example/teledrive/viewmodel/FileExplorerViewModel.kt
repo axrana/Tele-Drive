@@ -95,8 +95,7 @@ class FileExplorerViewModel(
                     val topic = tdLibraryManager.execute<TdApi.ForumTopicInfo>(TdApi.CreateForumTopic(session.channelId, name, false, null))
                     repository.createFolder(name, _currentFolderId.value, topic.forumTopicId.toLong())
                 } catch (e: Exception) {
-                    val formattedText = TdApi.FormattedText()
-                    formattedText.text = "Folder: $name"
+                    val formattedText = TdApi.FormattedText("Folder: $name", null)
                     val content = TdApi.InputMessageText(formattedText, null, false)
                     val message = tdLibraryManager.execute<TdApi.Message>(TdApi.SendMessage(session.channelId, null, null, null, null, content))
                     repository.createFolder(name, _currentFolderId.value, message.id)
@@ -111,27 +110,34 @@ class FileExplorerViewModel(
         _searchQuery.value = query
     }
 
-    fun uploadFile(context: Context, path: String, shouldCompress: Boolean) {
+    fun uploadFile(context: Context, uri: android.net.Uri, shouldCompress: Boolean) {
         viewModelScope.launch {
             try {
-                val folderId = _currentFolderId.value ?: return@launch
-                val file = File(path)
-
-                if (file.length() > 2L * 1024 * 1024 * 1024) {
+                val folderId = _currentFolderId.value ?: run {
+                    _errorFlow.emit("No folder selected")
+                    return@launch
+                }
+                val realFile = com.example.teledrive.util.UriUtils.getFileFromUri(context, uri)
+                    ?: run {
+                        _errorFlow.emit("Could not read file")
+                        return@launch
+                    }
+                if (realFile.length() > 2L * 1024 * 1024 * 1024) {
                     _errorFlow.emit("File too large! Max: 2GB")
                     return@launch
                 }
-
                 val workRequest = OneTimeWorkRequestBuilder<UploadWorker>()
-                    .setInputData(workDataOf(
-                        "file_path" to path,
-                        "folder_id" to folderId,
-                        "should_compress" to shouldCompress
-                    ))
+                    .setInputData(
+                        workDataOf(
+                            "filepath" to realFile.absolutePath,
+                            "folderid" to folderId,
+                            "shouldcompress" to shouldCompress
+                        )
+                    )
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
                     .build()
-
                 WorkManager.getInstance(context).enqueue(workRequest)
+                _errorFlow.emit("Upload started: ${realFile.name}")
             } catch (e: Exception) {
                 _errorFlow.emit("Upload failed: ${e.message}")
             }

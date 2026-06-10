@@ -8,29 +8,28 @@ import java.io.FileOutputStream
 
 object UriUtils {
     fun getFileFromUri(context: Context, uri: Uri): File? {
-        val returnCursor = context.contentResolver.query(uri, null, null, null, null) ?: return null
-        val nameIndex = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        returnCursor.moveToFirst()
-        val name = returnCursor.getString(nameIndex)
-        returnCursor.close()
-
-        val file = File(context.cacheDir, name)
-        try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val outputStream = FileOutputStream(file)
-            var read = 0
-            val maxBufferSize = 1 * 1024 * 1024
-            val bytesAvailable = inputStream.available()
-            val bufferSize = Math.min(bytesAvailable, maxBufferSize)
-            val buffers = ByteArray(bufferSize)
-            while (inputStream.read(buffers).also { read = it } != -1) {
-                outputStream.write(buffers, 0, read)
+        return try {
+            val fileName = getFileName(context, uri) ?: "upload_${System.currentTimeMillis()}"
+            val destFile = File(context.cacheDir, fileName)
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
             }
-            inputStream.close()
-            outputStream.close()
+            destFile
         } catch (e: Exception) {
-            return null
+            null
         }
-        return file
+    }
+
+    private fun getFileName(context: Context, uri: Uri): String? {
+        var name: String? = null
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) name = cursor.getString(index)
+            }
+        }
+        return name
     }
 }

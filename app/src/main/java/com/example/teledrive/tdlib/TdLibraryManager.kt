@@ -38,22 +38,22 @@ class TdLibraryManager(private val context: Context) {
 
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
         if (state is TdApi.AuthorizationStateWaitTdlibParameters) {
-            val params = TdApi.SetTdlibParameters(
-                false,
-                File(context.filesDir, "tdlib").absolutePath,
-                File(context.filesDir, "tdlib_files").absolutePath,
-                "".toByteArray(),
-                true,
-                true,
-                true,
-                false,
-                context.getString(R.string.telegram_api_id).let { if (it == "YOURAPIIDHERE") 0 else it.toInt() },
-                context.getString(R.string.telegram_api_hash),
-                "en",
-                "Android",
-                "1.0",
-                "1.0"
-            )
+            val params = TdApi.SetTdlibParameters()
+            params.useTestDc = false
+            params.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
+            params.filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
+            params.databaseEncryptionKey = "".toByteArray()
+            params.useFileDatabase = true
+            params.useChatInfoDatabase = true
+            params.useMessageDatabase = true
+            params.useSecretChats = false
+            params.apiId = context.getString(R.string.telegram_api_id).let { if (it == "YOURAPIIDHERE") 0 else it.toInt() }
+            params.apiHash = context.getString(R.string.telegram_api_hash)
+            params.systemLanguageCode = "en"
+            params.deviceModel = "Android"
+            params.systemVersion = "1.0"
+            params.applicationVersion = "1.0"
+
             send(params)
         }
     }
@@ -80,6 +80,10 @@ class TdLibraryManager(private val context: Context) {
 
     fun submitCode(code: String) {
         send(TdApi.CheckAuthenticationCode(code))
+    }
+
+    fun submitPassword(password: String) {
+        send(TdApi.CheckAuthenticationPassword(password))
     }
 
     fun logOut() {

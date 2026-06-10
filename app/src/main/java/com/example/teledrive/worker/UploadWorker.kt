@@ -18,8 +18,8 @@ class UploadWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val path = inputData.getString("file_path") ?: return Result.failure()
-        val folderId = inputData.getLong("folder_id", -1L)
+        val path = inputData.getString("filepath") ?: return Result.failure()
+        val folderId = inputData.getLong("folderid", -1L)
         val file = File(path)
         if (!file.exists()) return Result.failure()
 

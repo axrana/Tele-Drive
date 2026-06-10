@@ -1,13 +1,15 @@
 package com.example.teledrive.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordKeyboardType
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.teledrive.viewmodel.LoginViewModel
+import com.example.teledrive.viewmodel.LoginUiState
 
 @Composable
 fun LoginScreen(viewModel: LoginViewModel) {
@@ -29,7 +31,8 @@ fun LoginScreen(viewModel: LoginViewModel) {
                     value = phone,
                     onValueChange = { phone = it },
                     label = { Text("Phone (+91...)") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                 )
                 Button(onClick = { viewModel.submitPhoneNumber(phone) }, modifier = Modifier.padding(top = 16.dp)) {
                     Text("Send OTP")
@@ -40,7 +43,8 @@ fun LoginScreen(viewModel: LoginViewModel) {
                     value = code,
                     onValueChange = { code = it },
                     label = { Text("OTP") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 Button(onClick = { viewModel.submitCode(code) }, modifier = Modifier.padding(top = 16.dp)) {
                     Text("Verify")

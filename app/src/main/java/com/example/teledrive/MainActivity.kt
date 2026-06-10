@@ -15,6 +15,8 @@ import com.example.teledrive.ui.screens.SettingsScreen
 import com.example.teledrive.ui.theme.TeleDriveTheme
 import com.example.teledrive.viewmodel.FileExplorerViewModel
 import com.example.teledrive.viewmodel.LoginViewModel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginEffect(viewModel: LoginViewModel, tdManager: com.example.teledrive.tdlib.TdLibraryManager) {
@@ -62,13 +64,12 @@ class MainActivity : ComponentActivity() {
         val viewModelFactory = TeleDriveViewModelFactory(tdLibraryManager, repository)
 
         setContent {
-            val persistentSettings by repository.getSettings().collectAsState(initial = null)
+            val persistentSettings by repository.getSettings().collectAsState(initial = com.example.teledrive.data.local.entity.Settings())
             val isDarkMode = persistentSettings?.isDarkMode ?: false
 
             TeleDriveTheme(darkTheme = isDarkMode) {
                 val navController = rememberNavController()
                 val userSession by repository.getUserSession().collectAsState(initial = null)
-                val shouldCompress = persistentSettings?.shouldCompress ?: false
 
                 NavHost(navController = navController, startDestination = if (userSession != null) "explorer" else "login") {
                     composable("login") {
@@ -81,7 +82,6 @@ class MainActivity : ComponentActivity() {
                         ExplorerEffect(explorerViewModel, tdLibraryManager)
                         FileExplorerScreen(
                             viewModel = explorerViewModel,
-                            shouldCompress = shouldCompress,
                             onOpenSettings = { navController.navigate("settings") }
                         )
                     }

@@ -6,7 +6,7 @@ import androidx.work.WorkerParameters
 import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.repository.TeleDriveRepository
 import com.example.teledrive.tdlib.TdLibraryManager
-import org.drinkless.td.libcore.telegram.TdApi
+import org.drinkless.tdlib.TdApi
 import kotlinx.coroutines.flow.firstOrNull
 import java.io.File
 
@@ -26,7 +26,6 @@ class UploadWorker(
         return try {
             val session = repository.getUserSession().firstOrNull() ?: return Result.failure()
 
-            // Fixed InputMessageDocument for TDLib 1.8.x
             val inputMessage = TdApi.InputMessageDocument(
                 TdApi.InputFileLocal(file.absolutePath),
                 null,
@@ -35,7 +34,7 @@ class UploadWorker(
             )
 
             val message = tdLibraryManager.execute<TdApi.Message>(
-                TdApi.SendMessage(session.channelId, 0, null, null, null, inputMessage)
+                TdApi.SendMessage(session.channelId, null, null, null, null, inputMessage)
             )
 
             val docContent = message.content as TdApi.MessageDocument

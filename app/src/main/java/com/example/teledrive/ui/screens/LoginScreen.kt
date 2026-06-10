@@ -50,6 +50,31 @@ fun LoginScreen(viewModel: LoginViewModel) {
                     Text("Verify")
                 }
             }
+            is LoginUiState.WaitPassword -> {
+                var password by remember { mutableStateOf("") }
+                var passwordVisible by remember { mutableStateOf(false) }
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("2FA Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (passwordVisible)
+                        androidx.compose.ui.text.input.VisualTransformation.None
+                    else
+                        androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Text(if (passwordVisible) "Hide" else "Show")
+                        }
+                    }
+                )
+                Button(
+                    onClick = { viewModel.submitPassword(password) },
+                    modifier = Modifier.padding(top = 16.dp)
+                ) {
+                    Text("Submit Password")
+                }
+            }
             is LoginUiState.Loading -> {
                 CircularProgressIndicator()
             }

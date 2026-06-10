@@ -197,7 +197,6 @@ fun FileExplorerScreen(
                 onClick = {
                     renameInput = selectedFolderForMenu?.name ?: ""
                     showRenameDialog = true
-                    // selectedFolderForMenu is handled in Rename Dialog confirm
                 },
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
             )

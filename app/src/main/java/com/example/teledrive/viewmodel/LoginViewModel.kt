@@ -14,6 +14,7 @@ sealed class LoginUiState {
     object Loading : LoginUiState()
     object WaitPhoneNumber : LoginUiState()
     object WaitCode : LoginUiState()
+    object WaitPassword : LoginUiState()
     object LoggedIn : LoginUiState()
     data class Error(val message: String) : LoginUiState()
 }
@@ -40,6 +41,9 @@ class LoginViewModel(
                     }
                     is TdApi.AuthorizationStateWaitCode -> {
                         _uiState.value = LoginUiState.WaitCode
+                    }
+                    is TdApi.AuthorizationStateWaitPassword -> {
+                        _uiState.value = LoginUiState.WaitPassword
                     }
                     is TdApi.AuthorizationStateReady -> {
                         handleLoginSuccess()
@@ -71,6 +75,16 @@ class LoginViewModel(
             if (result is TdApi.Error) {
                 _uiState.value = LoginUiState.WaitCode
                 viewModelScope.launch { _errorFlow.emit("Invalid code: ${result.message}") }
+            }
+        }
+    }
+
+    fun submitPassword(password: String) {
+        _uiState.value = LoginUiState.Loading
+        tdLibraryManager.send(TdApi.CheckAuthenticationPassword(password)) { result ->
+            if (result is TdApi.Error) {
+                _uiState.value = LoginUiState.WaitPassword
+                viewModelScope.launch { _errorFlow.emit("Wrong password: ${result.message}") }
             }
         }
     }

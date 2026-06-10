@@ -95,7 +95,8 @@ class FileExplorerViewModel(
                     val topic = tdLibraryManager.execute<TdApi.ForumTopicInfo>(TdApi.CreateForumTopic(session.channelId, name, false, null))
                     repository.createFolder(name, _currentFolderId.value, topic.forumTopicId.toLong())
                 } catch (e: Exception) {
-                    val formattedText = TdApi.FormattedText("Folder: $name", null)
+                    val formattedText = TdApi.FormattedText()
+                    formattedText.text = "Folder: $name"
                     val content = TdApi.InputMessageText(formattedText, null, false)
                     val message = tdLibraryManager.execute<TdApi.Message>(TdApi.SendMessage(session.channelId, null, null, null, null, content))
                     repository.createFolder(name, _currentFolderId.value, message.id)

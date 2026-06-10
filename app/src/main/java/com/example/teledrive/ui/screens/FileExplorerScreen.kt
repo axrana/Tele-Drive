@@ -1,5 +1,6 @@
 package com.example.teledrive.ui.screens
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,9 +51,9 @@ fun FileExplorerScreen(
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri ->
+    ) { uri: Uri? ->
         uri?.let {
-            viewModel.uploadFile(context, it.toString(), shouldCompress)
+            viewModel.uploadFile(context, it, shouldCompress)
         }
     }
 

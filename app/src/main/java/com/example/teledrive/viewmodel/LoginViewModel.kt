@@ -110,7 +110,7 @@ class LoginViewModel(
             val newSession = UserSession(
                 telegramUserId = me.id,
                 phoneNumber = phoneNumber,
-                username = "",
+                username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
                 firstName = me.firstName,
                 lastName = me.lastName,
                 channelId = channelId,

@@ -47,7 +47,7 @@ class TdLibraryManager(private val context: Context) {
             params.useChatInfoDatabase = true
             params.useMessageDatabase = true
             params.useSecretChats = false
-            params.apiId = context.getString(R.string.telegram_api_id).toInt()
+            params.apiId = context.getString(R.string.telegram_api_id).let { if (it == "YOURAPIIDHERE") 0 else it.toInt() }
             params.apiHash = context.getString(R.string.telegram_api_hash)
             params.systemLanguageCode = "en"
             params.deviceModel = "Android"

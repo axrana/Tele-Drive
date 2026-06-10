@@ -2,12 +2,13 @@ package com.example.teledrive.tdlib
 
 import android.content.Context
 import com.example.teledrive.R
-import com.example.teledrive.util.TeleDriveLogger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import org.drinkless.td.libcore.telegram.Client
-import org.drinkless.td.libcore.telegram.TdApi
+import org.drinkless.tdlib.Client
+import org.drinkless.tdlib.TdApi
 import java.io.File
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class TdLibraryManager(private val context: Context) {
     private var client: Client? = null
@@ -16,60 +17,64 @@ class TdLibraryManager(private val context: Context) {
     private val _authorizationState = MutableStateFlow<TdApi.AuthorizationState?>(null)
     val authorizationState = _authorizationState.asStateFlow()
 
+    val errorFlow = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val fileUpdates = MutableSharedFlow<TdApi.File>(extraBufferCapacity = 64)
+
     init { initializeClient() }
 
     @Synchronized
     private fun initializeClient() {
         if (client != null) return
-        client = Client.create({ obj ->
+        val updateHandler = Client.ResultHandler { obj ->
             if (obj is TdApi.UpdateAuthorizationState) {
                 _authorizationState.value = obj.authorizationState
                 handleAuthorizationState(obj.authorizationState)
+            } else if (obj is TdApi.UpdateFile) {
+                scope.launch { fileUpdates.emit(obj.file) }
             }
-        }, null, null)
+        }
+        client = Client.create(updateHandler, null, null)
     }
 
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
         if (state is TdApi.AuthorizationStateWaitTdlibParameters) {
-            val params = TdApi.TdlibParameters().apply {
-                apiId = context.getString(R.string.telegram_api_id).toInt()
-                apiHash = context.getString(R.string.telegram_api_hash)
-                useTestDc = false
-                databaseDirectory = File(context.filesDir, "tdlib").absolutePath
-                filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
-                useFileDatabase = true
-                useChatInfoDatabase = true
-                useMessageDatabase = true
-                useSecretChats = false
-                systemLanguageCode = "en"
-                deviceModel = "Android"
-                systemVersion = "1.0"
-                applicationVersion = "1.0"
-                enableStorageOptimizer = true
-                ignoreFileNames = false
-            }
-            send(TdApi.SetTdlibParameters(params))
+            val params = TdApi.SetTdlibParameters()
+            params.useTestDc = false
+            params.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
+            params.filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
+            params.databaseEncryptionKey = "".toByteArray()
+            params.useFileDatabase = true
+            params.useChatInfoDatabase = true
+            params.useMessageDatabase = true
+            params.useSecretChats = false
+            params.apiId = context.getString(R.string.telegram_api_id).toInt()
+            params.apiHash = context.getString(R.string.telegram_api_hash)
+            params.systemLanguageCode = "en"
+            params.deviceModel = "Android"
+            params.systemVersion = "1.0"
+            params.applicationVersion = "1.0"
+
+            send(params)
         }
     }
 
-    fun send(query: TdApi.Function, callback: (TdApi.Object) -> Unit = {}) {
+    fun send(query: TdApi.Function<*>, callback: (TdApi.Object) -> Unit = {}) {
         client?.send(query, callback)
     }
 
-    suspend fun <T : TdApi.Object> execute(query: TdApi.Function): T = suspendCancellableCoroutine { cont ->
-        cont.invokeOnCancellation { }
+    suspend fun <T : TdApi.Object> execute(query: TdApi.Function<T>): T = suspendCancellableCoroutine { cont ->
         client?.send(query) { result ->
             if (result is TdApi.Error) {
-                cont.resumeWith(Result.failure(Exception(result.message)))
+                cont.resumeWithException(Exception(result.message))
             } else {
                 @Suppress("UNCHECKED_CAST")
-                cont.resumeWith(Result.success(result as T))
+                cont.resume(result as T)
             }
         }
     }
 
     fun submitPhoneNumber(phone: String) {
-        val settings = TdApi.PhoneNumberAuthenticationSettings()
+        val settings = TdApi.PhoneNumberAuthenticationSettings(false, false, false, false, false, null, null)
         send(TdApi.SetAuthenticationPhoneNumber(phone, settings))
     }
 

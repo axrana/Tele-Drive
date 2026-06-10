@@ -15,7 +15,7 @@ import com.example.teledrive.worker.UploadWorker
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import org.drinkless.td.libcore.telegram.TdApi
+import org.drinkless.tdlib.TdApi
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -64,7 +64,6 @@ class FileExplorerViewModel(
             tdLibraryManager.fileUpdates.collect { tdFile ->
                 if (tdFile.local.downloadedSize > 0) {
                     val progress = tdFile.local.downloadedSize.toFloat() / tdFile.size
-                    // Remote ID is used to track progress
                     _downloadProgress.value = _downloadProgress.value + (tdFile.remote.id to progress)
                 }
             }
@@ -92,18 +91,11 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
-                try {
-                    // Try creating as Forum Topic first
-                    val topic = tdLibraryManager.execute(TdApi.CreateForumTopic(session.channelId, name, null))
-                    repository.createFolder(name, _currentFolderId.value, topic.messageThreadId)
-                } catch (e: Exception) {
-                    // Fallback to regular message thread
-                    val formattedText = TdApi.FormattedText()
-                    formattedText.text = "Folder: $name"
-                    val content = TdApi.InputMessageText(formattedText, false, true)
-                    val message = tdLibraryManager.execute(TdApi.SendMessage(session.channelId, 0, null, null, null, content))
-                    repository.createFolder(name, _currentFolderId.value, message.id)
-                }
+                val formattedText = TdApi.FormattedText()
+                formattedText.text = "Folder: $name"
+                val content = TdApi.InputMessageText(formattedText, null, false)
+                val message = tdLibraryManager.execute<TdApi.Message>(TdApi.SendMessage(session.channelId, null, null, null, null, content))
+                repository.createFolder(name, _currentFolderId.value, message.id)
             } catch (e: Exception) {
                 _errorFlow.emit("Failed to create folder: ${e.message}")
             }
@@ -144,7 +136,7 @@ class FileExplorerViewModel(
     fun downloadFile(fileEntity: FileEntity) {
         viewModelScope.launch {
             try {
-                val file = tdLibraryManager.execute(TdApi.GetRemoteFile(fileEntity.telegramFileId))
+                val file = tdLibraryManager.execute<TdApi.File>(TdApi.GetRemoteFile(fileEntity.telegramFileId, null))
                 tdLibraryManager.send(TdApi.DownloadFile(file.id, 1, 0, 0, false))
             } catch (e: Exception) {
                 _errorFlow.emit("Download failed: ${e.message}")

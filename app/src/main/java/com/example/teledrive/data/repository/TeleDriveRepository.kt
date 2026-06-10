@@ -9,7 +9,7 @@ import com.example.teledrive.data.local.entity.Folder
 import com.example.teledrive.data.local.entity.ShareToken
 import com.example.teledrive.data.local.entity.UserSession
 import kotlinx.coroutines.flow.Flow
-import org.drinkless.td.libcore.telegram.TdApi
+import org.drinkless.tdlib.TdApi
 
 class TeleDriveRepository(
     private val userSessionDao: UserSessionDao,

@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
                         ExplorerEffect(explorerViewModel, tdLibraryManager)
                         FileExplorerScreen(
                             viewModel = explorerViewModel,
+                            shouldCompress = persistentSettings?.shouldCompress ?: false,
                             onOpenSettings = { navController.navigate("settings") }
                         )
                     }

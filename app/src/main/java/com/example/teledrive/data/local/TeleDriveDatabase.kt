@@ -11,9 +11,10 @@ import com.example.teledrive.data.local.entity.*
         Folder::class,
         FileEntity::class,
         ShareToken::class,
-        Settings::class
+        Settings::class,
+        TransferEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class TeleDriveDatabase : RoomDatabase() {
@@ -22,4 +23,5 @@ abstract class TeleDriveDatabase : RoomDatabase() {
     abstract fun fileDao(): FileDao
     abstract fun shareTokenDao(): ShareTokenDao
     abstract fun settingsDao(): SettingsDao
+    abstract fun transferDao(): TransferDao
 }

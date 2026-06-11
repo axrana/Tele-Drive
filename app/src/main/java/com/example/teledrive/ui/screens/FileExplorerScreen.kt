@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -25,7 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.local.entity.Folder
-import com.example.teledrive.viewmodel.FileExplorerViewModel
+import com.example.teledrive.ui.viewmodel.FileExplorerViewModel
 import kotlinx.coroutines.flow.collect
 import java.util.*
 
@@ -38,9 +39,15 @@ fun FileExplorerScreen(
     onFileClick: (FileEntity) -> Unit
 ) {
     val context = LocalContext.current
+    val currentFolderId by viewModel.currentFolderId.collectAsState()
     val folders by viewModel.folders.collectAsState()
     val files by viewModel.files.collectAsState()
     val breadcrumb by viewModel.breadcrumb.collectAsState()
+
+    androidx.activity.compose.BackHandler(enabled = currentFolderId != null) {
+        val lastFolder = if (breadcrumb.size > 1) breadcrumb[breadcrumb.size - 2] else null
+        viewModel.navigateToFolder(lastFolder)
+    }
     val searchQuery by viewModel.searchQuery.collectAsState()
     val totalStorageUsed by viewModel.totalStorageUsed.collectAsState()
     val fileCount by viewModel.fileCount.collectAsState()
@@ -50,6 +57,9 @@ fun FileExplorerScreen(
     val isSyncing by viewModel.isSyncing.collectAsState()
     val isGridView by viewModel.isGridView.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
+    val isSelectionMode by viewModel.isSelectionMode.collectAsState()
+    val selectedFiles by viewModel.selectedFiles.collectAsState()
+    val selectedFolders by viewModel.selectedFolders.collectAsState()
 
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var folderNameInput by remember { mutableStateOf("") }
@@ -59,6 +69,7 @@ fun FileExplorerScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf<Any?>(null) }
     var showMoveDialog by remember { mutableStateOf<FileEntity?>(null) }
+    var showTransferCenter by remember { mutableStateOf(false) }
     var renameInput by remember { mutableStateOf("") }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -77,41 +88,72 @@ fun FileExplorerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Tele Drive") },
-                actions = {
-                    IconButton(onClick = { viewModel.syncFromTelegram() }, enabled = !isSyncing) {
-                        Icon(Icons.Default.Sync, contentDescription = "Sync", modifier = if (isSyncing) Modifier.size(24.dp) else Modifier)
-                    }
-                    var showSortMenu by remember { mutableStateOf(false) }
-                    IconButton(onClick = { showSortMenu = true }) {
-                        Icon(Icons.Default.Sort, contentDescription = "Sort")
-                    }
-                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                        FileExplorerViewModel.SortOrder.values().forEach { order ->
-                            DropdownMenuItem(
-                                text = { Text(order.name.lowercase().capitalize()) },
-                                onClick = {
-                                    viewModel.setSortOrder(order)
-                                    showSortMenu = false
-                                },
-                                leadingIcon = {
-                                    if (sortOrder == order) Icon(Icons.Default.Check, null)
-                                }
+            if (isSelectionMode) {
+                TopAppBar(
+                    title = { Text("${selectedFiles.size + selectedFolders.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.clearSelection() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear Selection")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.selectAll() }) {
+                            Icon(Icons.Default.SelectAll, contentDescription = "Select All")
+                        }
+                        IconButton(onClick = { viewModel.downloadSelected() }) {
+                            Icon(Icons.Default.Download, contentDescription = "Download")
+                        }
+                        IconButton(onClick = { viewModel.deleteSelected() }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("Tele Drive") },
+                    actions = {
+                        IconButton(onClick = { viewModel.syncFromTelegram() }, enabled = !isSyncing) {
+                            Icon(Icons.Default.Sync, contentDescription = "Sync", modifier = if (isSyncing) Modifier.size(24.dp) else Modifier)
+                        }
+                        var showSortMenu by remember { mutableStateOf(false) }
+                        IconButton(onClick = { showSortMenu = true }) {
+                            Icon(Icons.Default.Sort, contentDescription = "Sort")
+                        }
+                        DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                            FileExplorerViewModel.SortOrder.values().forEach { order ->
+                                DropdownMenuItem(
+                                    text = { Text(order.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                    onClick = {
+                                        viewModel.setSortOrder(order)
+                                        showSortMenu = false
+                                    },
+                                    leadingIcon = {
+                                        if (sortOrder == order) Icon(Icons.Default.Check, null)
+                                    }
+                                )
+                            }
+                        }
+                        IconButton(onClick = { viewModel.toggleViewMode() }) {
+                            Icon(
+                                if (isGridView) Icons.Default.ViewList else Icons.Default.ViewModule,
+                                contentDescription = "Toggle View"
                             )
                         }
+                    IconButton(onClick = { showTransferCenter = true }) {
+                        val activeCount = (downloadProgress.size + uploadProgress.size)
+                        BadgedBox(badge = { if (activeCount > 0) Badge { Text(activeCount.toString()) } }) {
+                            Icon(Icons.Default.SyncAlt, contentDescription = "Transfers")
+                        }
                     }
-                    IconButton(onClick = { viewModel.toggleViewMode() }) {
-                        Icon(
-                            if (isGridView) Icons.Default.ViewList else Icons.Default.ViewModule,
-                            contentDescription = "Toggle View"
-                        )
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
                     }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                }
-            )
+                )
+            }
         },
         bottomBar = {
             Column {
@@ -170,16 +212,21 @@ fun FileExplorerScreen(
             )
 
             // Breadcrumb
-            Row(
+            androidx.compose.foundation.lazy.LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { viewModel.navigateToFolder(null) }) {
-                    Text("Home")
+                item {
+                    TextButton(onClick = { viewModel.navigateToFolder(null) }) {
+                        Text("Home")
+                    }
                 }
-                breadcrumb.forEach { folder ->
+                items(
+                    items = breadcrumb,
+                    key = { it.id }
+                ) { folder ->
                     Text(" > ", style = MaterialTheme.typography.bodyLarge)
                     TextButton(onClick = { viewModel.navigateToFolder(folder) }) {
                         Text(folder.name)
@@ -239,18 +286,32 @@ fun FileExplorerScreen(
                     items(folders) { folder ->
                         FolderItem(
                             folder = folder,
-                            onClick = { viewModel.navigateToFolder(folder) },
+                            isSelected = selectedFolders.contains(folder.id),
+                            onClick = {
+                                if (isSelectionMode) {
+                                    viewModel.toggleFolderSelection(folder.id)
+                                } else {
+                                    viewModel.navigateToFolder(folder)
+                                }
+                            },
                             onLongClick = {
-                                selectedFolderForMenu = folder
+                                viewModel.toggleFolderSelection(folder.id)
                             }
                         )
                     }
                     items(files) { file ->
                         FileItem(
                             file = file,
-                            onClick = { onFileClick(file) },
+                            isSelected = selectedFiles.contains(file.id),
+                            onClick = {
+                                if (isSelectionMode) {
+                                    viewModel.toggleFileSelection(file.id)
+                                } else {
+                                    onFileClick(file)
+                                }
+                            },
                             onLongClick = {
-                                selectedFileForMenu = file
+                                viewModel.toggleFileSelection(file.id)
                             }
                         )
                     }
@@ -259,60 +320,72 @@ fun FileExplorerScreen(
         }
     }
 
-    // Dropdown Menus
+    // Bottom Sheets
     if (selectedFolderForMenu != null) {
-        DropdownMenu(
-            expanded = true,
-            onDismissRequest = { selectedFolderForMenu = null }
-        ) {
-            DropdownMenuItem(
-                text = { Text("Rename") },
-                onClick = {
+        ModalBottomSheet(onDismissRequest = { selectedFolderForMenu = null }) {
+            ListItem(
+                headlineContent = { Text("Rename") },
+                leadingContent = { Icon(Icons.Default.Edit, null) },
+                modifier = Modifier.combinedClickable(onClick = {
                     renameInput = selectedFolderForMenu?.name ?: ""
                     showRenameDialog = true
-                },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                })
             )
-            DropdownMenuItem(
-                text = { Text("Move") },
-                onClick = {
-                    showMoveDialog = selectedFileForMenu
-                    selectedFileForMenu = null
-                },
-                leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) }
-            )
-            DropdownMenuItem(
-                text = { Text("Delete") },
-                onClick = {
+            ListItem(
+                headlineContent = { Text("Delete") },
+                leadingContent = { Icon(Icons.Default.Delete, null) },
+                modifier = Modifier.combinedClickable(onClick = {
                     showDeleteConfirmation = selectedFolderForMenu
                     selectedFolderForMenu = null
-                },
-                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                })
             )
+            Spacer(Modifier.height(32.dp))
         }
     }
 
     if (selectedFileForMenu != null) {
-        DropdownMenu(
-            expanded = true,
-            onDismissRequest = { selectedFileForMenu = null }
-        ) {
-            DropdownMenuItem(
-                text = { Text("Rename") },
-                onClick = {
+        ModalBottomSheet(onDismissRequest = { selectedFileForMenu = null }) {
+            ListItem(
+                headlineContent = { Text("Open with...") },
+                leadingContent = { Icon(Icons.Default.OpenInNew, null) },
+                modifier = Modifier.combinedClickable(onClick = {
+                    viewModel.openFile(context, selectedFileForMenu!!)
+                    selectedFileForMenu = null
+                })
+            )
+            ListItem(
+                headlineContent = { Text("Download") },
+                leadingContent = { Icon(Icons.Default.Download, null) },
+                modifier = Modifier.combinedClickable(onClick = {
+                    viewModel.downloadFile(selectedFileForMenu!!)
+                    selectedFileForMenu = null
+                })
+            )
+            ListItem(
+                headlineContent = { Text("Rename") },
+                leadingContent = { Icon(Icons.Default.Edit, null) },
+                modifier = Modifier.combinedClickable(onClick = {
                     renameInput = selectedFileForMenu?.name ?: ""
                     showRenameDialog = true
-                },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                })
             )
-            DropdownMenuItem(
-                text = { Text("Delete") },
-                onClick = {
+            ListItem(
+                headlineContent = { Text("Move") },
+                leadingContent = { Icon(Icons.Default.DriveFileMove, null) },
+                modifier = Modifier.combinedClickable(onClick = {
+                    showMoveDialog = selectedFileForMenu
+                    selectedFileForMenu = null
+                })
+            )
+            ListItem(
+                headlineContent = { Text("Delete") },
+                leadingContent = { Icon(Icons.Default.Delete, null) },
+                modifier = Modifier.combinedClickable(onClick = {
                     showDeleteConfirmation = selectedFileForMenu
                     selectedFileForMenu = null
-                },
-                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                })
             )
+            Spacer(Modifier.height(32.dp))
         }
     }
 
@@ -408,6 +481,55 @@ fun FileExplorerScreen(
         )
     }
 
+    if (showTransferCenter) {
+        val transfers by viewModel.allTransfers.collectAsState(initial = emptyList())
+        ModalBottomSheet(onDismissRequest = { showTransferCenter = false }) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Transfers", style = MaterialTheme.typography.titleLarge)
+                    TextButton(onClick = { viewModel.clearFinishedTransfers() }) {
+                        Text("Clear Finished")
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                if (transfers.isEmpty()) {
+                    Text("No active transfers", modifier = Modifier.padding(16.dp))
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn {
+                        items(transfers) { transfer ->
+                            ListItem(
+                                headlineContent = { Text(transfer.name) },
+                                supportingContent = {
+                                    Column {
+                                        Text("${transfer.type} • ${transfer.status}")
+                                        if (transfer.status == "ACTIVE") {
+                                            LinearProgressIndicator(
+                                                progress = { transfer.progress },
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                },
+                                trailingContent = {
+                                    if (transfer.status == "ACTIVE" || transfer.status == "PENDING") {
+                                        IconButton(onClick = { viewModel.cancelTransfer(transfer) }) {
+                                            Icon(Icons.Default.Cancel, null)
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(32.dp))
+        }
+    }
+
     if (showMoveDialog != null) {
         val allFolders by viewModel.allFolders.collectAsState()
         AlertDialog(
@@ -445,8 +567,10 @@ fun FileExplorerScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FolderItem(folder: Folder, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun FolderItem(folder: Folder, isSelected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     ElevatedCard(
+        colors = if (isSelected) CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                 else CardDefaults.elevatedCardColors(),
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
@@ -482,8 +606,10 @@ fun FolderItem(folder: Folder, onClick: () -> Unit, onLongClick: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileItem(file: FileEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun FileItem(file: FileEntity, isSelected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     ElevatedCard(
+        colors = if (isSelected) CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                 else CardDefaults.elevatedCardColors(),
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(

@@ -1,7 +1,7 @@
 package com.example.teledrive.data.repository
 
 import com.example.teledrive.data.local.entity.FileEntity
-import com.example.teledrive.data.local.entity.UserSession
+import com.example.teledrive.domain.repository.TeleDriveRepository
 import java.util.*
 import kotlinx.coroutines.flow.firstOrNull
 

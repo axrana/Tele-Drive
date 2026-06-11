@@ -44,4 +44,7 @@ interface FileDao {
 
     @Query("SELECT * FROM files WHERE folderId = :folderId")
     suspend fun getFilesInFolderSync(folderId: Long?): List<FileEntity>
+
+    @Query("SELECT * FROM files WHERE telegramMsgId = :msgId")
+    suspend fun getFileByMsgId(msgId: Long): FileEntity?
 }

@@ -8,8 +8,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.teledrive.viewmodel.LoginViewModel
-import com.example.teledrive.viewmodel.LoginUiState
+import com.example.teledrive.ui.viewmodel.LoginViewModel
+import com.example.teledrive.ui.viewmodel.LoginUiState
 
 @Composable
 fun LoginScreen(viewModel: LoginViewModel) {

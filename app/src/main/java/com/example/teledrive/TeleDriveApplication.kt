@@ -4,9 +4,10 @@ import android.app.Application
 import android.widget.Toast
 import androidx.work.Configuration
 import com.example.teledrive.data.local.TeleDriveDatabase
-import com.example.teledrive.data.repository.TeleDriveRepository
-import com.example.teledrive.tdlib.TdLibraryManager
-import com.example.teledrive.worker.TeleDriveWorkerFactory
+import com.example.teledrive.domain.repository.TeleDriveRepository
+import com.example.teledrive.data.repository.TeleDriveRepositoryImpl
+import com.example.teledrive.telegram.TdLibraryManager
+import com.example.teledrive.transfers.TeleDriveWorkerFactory
 import androidx.room.Room
 import com.example.teledrive.R
 
@@ -26,13 +27,16 @@ class TeleDriveApplication : Application(), Configuration.Provider {
             return
         }
 
-        database = Room.databaseBuilder(this, TeleDriveDatabase::class.java, "teledrive.db").build()
-        repository = TeleDriveRepository(
+        database = Room.databaseBuilder(this, TeleDriveDatabase::class.java, "teledrive.db")
+            .fallbackToDestructiveMigration()
+            .build()
+        repository = TeleDriveRepositoryImpl(
             database.userSessionDao(),
             database.folderDao(),
             database.fileDao(),
             database.shareTokenDao(),
-            database.settingsDao()
+            database.settingsDao(),
+            database.transferDao()
         )
         tdLibraryManager = TdLibraryManager(this)
     }

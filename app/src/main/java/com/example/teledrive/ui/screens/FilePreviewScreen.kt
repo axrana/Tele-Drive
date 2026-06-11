@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.teledrive.data.local.entity.FileEntity
-import com.example.teledrive.viewmodel.FileExplorerViewModel
+import com.example.teledrive.ui.viewmodel.FileExplorerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

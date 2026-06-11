@@ -31,5 +31,8 @@ data class FileEntity(
     val folderId: Long?,
     val uploadDate: Long,
     val isSynced: Boolean = true,
-    val thumbnailPath: String? = null
+    val thumbnailPath: String? = null,
+    val syncState: Int = 0,
+    val isDirty: Boolean = false,
+    val localPath: String? = null
 )

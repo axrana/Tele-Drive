@@ -26,5 +26,8 @@ data class Folder(
     val parentFolderId: Long? = null,
     val telegramThreadMsgId: Long,
     val telegramParentThreadId: Long? = null,
-    val createdDate: Long
+    val createdDate: Long,
+    val syncState: Int = 0,
+    val isDirty: Boolean = false,
+    val metadataVersion: Int = 1
 )

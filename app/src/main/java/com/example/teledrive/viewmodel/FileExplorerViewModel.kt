@@ -246,19 +246,16 @@ class FileExplorerViewModel(
         }
     }
 
-    fun downloadFile(fileEntity: FileEntity) {
+    fun downloadFile(context: Context, fileEntity: FileEntity) {
         viewModelScope.launch {
             try {
-                _pendingDownloads.value = _pendingDownloads.value + fileEntity.telegramFileId
-                val file = if (fileEntity.telegramFileId.isNotEmpty()) {
-                    tdLibraryManager.execute<TdApi.File>(TdApi.GetRemoteFile(fileEntity.telegramFileId, null))
-                } else {
-                    tdLibraryManager.execute<TdApi.File>(TdApi.GetFile(fileEntity.telegramMsgId.toInt())) // Fallback
-                }
-                tdLibraryManager.send(TdApi.DownloadFile(file.id, 1, 0, 0, false))
-                _errorFlow.emit("Downloading ${fileEntity.name}...")
+                val workRequest = OneTimeWorkRequestBuilder<com.example.teledrive.worker.DownloadWorker>()
+                    .setInputData(workDataOf("file_entity_id" to fileEntity.id))
+                    .addTag("download")
+                    .build()
+                WorkManager.getInstance(context).enqueue(workRequest)
+                _errorFlow.emit("Download queued: ${fileEntity.name}")
             } catch (e: Exception) {
-                _pendingDownloads.value = _pendingDownloads.value - fileEntity.telegramFileId
                 _errorFlow.emit("Download failed: ${e.message}")
             }
         }
@@ -287,7 +284,7 @@ class FileExplorerViewModel(
         }
     }
 
-    fun resolveToken(token: String, passwordEntry: String?) {
+    fun resolveToken(context: Context, token: String, passwordEntry: String?) {
         viewModelScope.launch {
             try {
                 val shareToken = repository.getShareToken(token) ?: throw Exception("Invalid token")
@@ -296,7 +293,7 @@ class FileExplorerViewModel(
                     return@launch
                 }
                 val file = repository.getFileById(shareToken.fileId) ?: throw Exception("File not found")
-                downloadFile(file)
+                downloadFile(context, file)
             } catch (e: Exception) {
                 _errorFlow.emit("Resolution failed: ${e.message}")
             }

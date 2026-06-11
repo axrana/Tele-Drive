@@ -8,6 +8,7 @@ import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.local.entity.Folder
 import com.example.teledrive.data.local.entity.ShareToken
 import com.example.teledrive.data.local.entity.UserSession
+import com.example.teledrive.telegram.MetadataHelper
 import kotlinx.coroutines.flow.Flow
 import org.drinkless.tdlib.TdApi
 
@@ -16,7 +17,8 @@ class TeleDriveRepository(
     private val folderDao: FolderDao,
     private val fileDao: FileDao,
     private val shareTokenDao: ShareTokenDao,
-    private val settingsDao: com.example.teledrive.data.local.dao.SettingsDao
+    private val settingsDao: com.example.teledrive.data.local.dao.SettingsDao,
+    private val transferDao: com.example.teledrive.data.local.dao.TransferDao
 ) {
     // User Session
     fun getUserSession(): Flow<UserSession?> = userSessionDao.getUserSession()
@@ -43,6 +45,39 @@ class TeleDriveRepository(
     suspend fun updateFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun renameFile(id: Long, newName: String) = fileDao.renameFile(id, newName)
     suspend fun moveFile(id: Long, folderId: Long?) = fileDao.moveFile(id, folderId)
+
+    suspend fun updateFileInTelegram(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long, file: FileEntity, newName: String? = null, newFolderId: Long? = null) {
+        val folder = (newFolderId ?: file.folderId)?.let { folderDao.getFolderById(it) }
+        val folderKey = folder?.telegramThreadMsgId
+        val name = newName ?: file.name
+        val caption = MetadataHelper.formatFileCaption(folderKey, name)
+
+        tdLibraryManager.execute<TdApi.Message>(TdApi.EditMessageCaption(
+            chatId,
+            file.telegramMsgId,
+            null,
+            TdApi.FormattedText(caption, null),
+            false
+        ))
+    }
+
+    suspend fun updateFolderInTelegram(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long, folder: Folder, newName: String? = null, newParentId: Long? = null) {
+        val name = newName ?: folder.name
+        val parentFolder = (newParentId ?: folder.parentFolderId)?.let { folderDao.getFolderById(it) }
+        val parentKey = parentFolder?.telegramThreadMsgId
+
+        val meta = MetadataHelper.formatFolderMetadata(name, parentKey)
+        try {
+            tdLibraryManager.execute<TdApi.Message>(TdApi.EditMessageText(
+                chatId,
+                folder.telegramThreadMsgId,
+                null,
+                TdApi.InputMessageText(TdApi.FormattedText(meta, null), null, false)
+            ))
+        } catch (e: Exception) {
+            // Revert to something safer or fix based on error
+        }
+    }
     suspend fun deleteFile(file: FileEntity) = fileDao.deleteFile(file)
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
     fun getFileCount(): Flow<Int> = fileDao.getFileCount()
@@ -76,12 +111,22 @@ class TeleDriveRepository(
     fun getSettings(): Flow<com.example.teledrive.data.local.entity.Settings?> = settingsDao.getSettings()
     suspend fun saveSettings(settings: com.example.teledrive.data.local.entity.Settings) = settingsDao.saveSettings(settings)
 
+    // Transfers
+    fun getAllTransfers() = transferDao.getAllTransfers()
+    fun getActiveTransfers() = transferDao.getActiveTransfers()
+    suspend fun insertTransfer(transfer: com.example.teledrive.data.local.entity.TransferEntity) = transferDao.insertTransfer(transfer)
+    suspend fun updateTransfer(transfer: com.example.teledrive.data.local.entity.TransferEntity) = transferDao.updateTransfer(transfer)
+    suspend fun updateTransferProgress(id: Long, status: com.example.teledrive.data.local.entity.TransferStatus, progress: Float, transferredSize: Long) = transferDao.updateProgress(id, status, progress, transferredSize)
+    suspend fun deleteTransfer(id: Long) = transferDao.deleteTransfer(id)
+    suspend fun clearFinishedTransfers() = transferDao.clearFinishedTransfers()
+    suspend fun getTransferById(id: Long) = transferDao.getTransferById(id)
+
     suspend fun syncFromTelegram(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long) {
         val limit = 100
         val allMessages = mutableListOf<TdApi.Message>()
         var lastMessageId = 0L
 
-        // 1. Fetch all messages first
+        // 1. Fetch all messages
         while (true) {
             val messages = tdLibraryManager.execute(TdApi.GetChatHistory(chatId, lastMessageId, 0, limit, false))
             if (messages.messages.isEmpty()) break
@@ -90,78 +135,77 @@ class TeleDriveRepository(
             if (messages.messages.size < limit) break
         }
 
-        // 2. First Pass: Sync all folders (Forum Topics + Text Markers)
+        // 2. Fetch Forum Topics
         try {
             val topics = tdLibraryManager.execute(TdApi.GetForumTopics(chatId, "", 0, 0, 0, 100))
             topics.topics.forEach { topic ->
-                folderDao.createFolder(Folder(
-                    name = topic.info.name,
-                    telegramThreadMsgId = topic.info.forumTopicId.toLong(),
-                    createdDate = System.currentTimeMillis()
-                ))
+                val existing = folderDao.getFolderByThreadId(topic.info.forumTopicId.toLong())
+                if (existing == null) {
+                    folderDao.createFolder(Folder(
+                        name = topic.info.name,
+                        telegramThreadMsgId = topic.info.forumTopicId.toLong(),
+                        createdDate = System.currentTimeMillis()
+                    ))
+                } else if (existing.name != topic.info.name) {
+                    folderDao.updateFolder(existing.copy(name = topic.info.name))
+                }
             }
         } catch (e: Exception) {}
 
+        // 3. Process Text Markers for Folders
         allMessages.forEach { msg ->
             if (msg.content is TdApi.MessageText) {
                 val text = (msg.content as TdApi.MessageText).text.text
-                if (text.startsWith("Folder:")) {
-                    // Modern format: Folder:Name Parent:Key
-                    val name = text.substringAfter("Folder:").substringBefore(" Parent:").trim()
-                    val parentKey = if (text.contains(" Parent:")) text.substringAfter(" Parent:").toLongOrNull() else null
-                    folderDao.createFolder(Folder(
-                        name = name,
-                        telegramThreadMsgId = msg.id,
-                        telegramParentThreadId = parentKey,
-                        createdDate = msg.date.toLong() * 1000
-                    ))
-                } else if (text.startsWith("Folder: ")) {
-                    // Legacy format: Folder: Name
-                    val name = text.removePrefix("Folder: ")
-                    folderDao.createFolder(Folder(
-                        name = name,
-                        telegramThreadMsgId = msg.id,
-                        createdDate = msg.date.toLong() * 1000
-                    ))
+                MetadataHelper.parseFolderMetadata(text)?.let { meta ->
+                    val existing = folderDao.getFolderByThreadId(msg.id)
+                    if (existing == null) {
+                        folderDao.createFolder(Folder(
+                            name = meta.name,
+                            telegramThreadMsgId = msg.id,
+                            telegramParentThreadId = meta.parentId,
+                            createdDate = msg.date.toLong() * 1000
+                        ))
+                    } else {
+                        folderDao.updateFolder(existing.copy(
+                            name = meta.name,
+                            telegramParentThreadId = meta.parentId
+                        ))
+                    }
                 }
             }
         }
 
-        // 3. Second Pass: Rebuild local hierarchy links
+        // 4. Rebuild Hierarchy (Idempotent)
         val allLocalFolders = folderDao.getAllFoldersSync()
         allLocalFolders.forEach { folder ->
-            if (folder.telegramParentThreadId != null) {
-                val parent = folderDao.getFolderByThreadId(folder.telegramParentThreadId)
-                if (parent != null) {
+            val parentThreadId = folder.telegramParentThreadId
+            if (parentThreadId != null) {
+                val parent = folderDao.getFolderByThreadId(parentThreadId)
+                if (parent != null && folder.parentFolderId != parent.id) {
                     folderDao.updateParentId(folder.id, parent.id)
                 }
+            } else if (folder.parentFolderId != null && folder.name != "Recovered") {
+                // If it should be root but isn't
+                folderDao.updateParentId(folder.id, null)
             }
         }
 
-        // 4. Create "Recovered" folder if not exists
+        // 5. Sync Files
         var recoveredFolderId: Long? = null
-        val existingRecovered = allLocalFolders.find { it.name == "Recovered" && it.parentFolderId == null }
-        if (existingRecovered != null) {
-            recoveredFolderId = existingRecovered.id
-        }
 
-        // 5. Third Pass: Sync Files
         allMessages.forEach { msg ->
             if (msg.content is TdApi.MessageDocument) {
                 val docContent = msg.content as TdApi.MessageDocument
                 val doc = docContent.document
                 val caption = (docContent.caption as? TdApi.FormattedText)?.text ?: ""
 
-                val telegramFolderId = if (caption.startsWith("TeleDriveFolder:")) {
-                    caption.removePrefix("TeleDriveFolder:").substringBefore(" ").toLongOrNull()
-                } else null
-
+                val telegramFolderId = MetadataHelper.parseFileFolderId(caption)
                 var localFolderId = telegramFolderId?.let { folderDao.getFolderByThreadId(it)?.id }
 
-                // If folder reference exists but cannot be found, move to Recovered
                 if (telegramFolderId != null && localFolderId == null) {
                     if (recoveredFolderId == null) {
-                        recoveredFolderId = folderDao.createFolder(Folder(
+                        val existingRecovered = folderDao.getAllFoldersSync().find { it.name == "Recovered" && it.parentFolderId == null }
+                        recoveredFolderId = existingRecovered?.id ?: folderDao.createFolder(Folder(
                             name = "Recovered",
                             telegramThreadMsgId = -1L,
                             createdDate = System.currentTimeMillis()
@@ -170,16 +214,24 @@ class TeleDriveRepository(
                     localFolderId = recoveredFolderId
                 }
 
-                fileDao.createFile(FileEntity(
-                    name = doc.fileName,
-                    size = doc.document.size.toLong(),
-                    mimeType = doc.mimeType,
-                    extension = doc.fileName.substringAfterLast('.', ""),
-                    telegramMsgId = msg.id,
-                    telegramFileId = doc.document.remote.id,
-                    folderId = localFolderId,
-                    uploadDate = msg.date.toLong() * 1000
-                ))
+                val existingFile = fileDao.getFileByTelegramMsgId(msg.id)
+                if (existingFile == null) {
+                    fileDao.createFile(FileEntity(
+                        name = doc.fileName,
+                        size = doc.document.size.toLong(),
+                        mimeType = doc.mimeType,
+                        extension = doc.fileName.substringAfterLast('.', ""),
+                        telegramMsgId = msg.id,
+                        telegramFileId = doc.document.remote.id,
+                        folderId = localFolderId,
+                        uploadDate = msg.date.toLong() * 1000
+                    ))
+                } else if (existingFile.folderId != localFolderId || existingFile.name != doc.fileName) {
+                    fileDao.updateFile(existingFile.copy(
+                        folderId = localFolderId,
+                        name = doc.fileName
+                    ))
+                }
             }
         }
     }

@@ -209,7 +209,10 @@ fun FileExplorerScreen(
             }
 
             if (folders.isEmpty() && files.isEmpty()) {
-                EmptyFolderState(onUploadClick = { filePickerLauncher.launch("*/*") })
+                EmptyFolderState(
+                    isSearch = searchQuery.isNotEmpty(),
+                    onUploadClick = { filePickerLauncher.launch("*/*") }
+                )
             } else {
                 LazyVerticalGrid(
                     columns = if (isGridView) GridCells.Fixed(2) else GridCells.Fixed(1),
@@ -473,7 +476,7 @@ fun FileItem(file: FileEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
 }
 
 @Composable
-fun EmptyFolderState(onUploadClick: () -> Unit) {
+fun EmptyFolderState(isSearch: Boolean = false, onUploadClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -482,28 +485,30 @@ fun EmptyFolderState(onUploadClick: () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            Icons.Default.CloudOff,
+            if (isSearch) Icons.Default.SearchOff else Icons.Default.CloudOff,
             contentDescription = null,
             modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.outline
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            "No files in this folder yet",
+            if (isSearch) "No matches found" else "No files in this folder yet",
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Upload something to get started",
+            if (isSearch) "Try a different search term" else "Upload something to get started",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(24.dp))
-        Button(onClick = onUploadClick) {
-            Icon(Icons.Default.Upload, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Upload File")
+        if (!isSearch) {
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onUploadClick) {
+                Icon(Icons.Default.Upload, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Upload File")
+            }
         }
     }
 }

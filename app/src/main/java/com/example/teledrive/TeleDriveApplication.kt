@@ -32,7 +32,8 @@ class TeleDriveApplication : Application(), Configuration.Provider {
             database.folderDao(),
             database.fileDao(),
             database.shareTokenDao(),
-            database.settingsDao()
+            database.settingsDao(),
+            database.transferDao()
         )
         tdLibraryManager = TdLibraryManager(this)
     }

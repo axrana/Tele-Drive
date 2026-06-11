@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -92,8 +93,9 @@ fun FilePreviewScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val context = LocalContext.current
                     Button(
-                        onClick = { viewModel.downloadFile(currentFile) },
+                        onClick = { viewModel.downloadFile(context, currentFile) },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Default.Download, contentDescription = null)

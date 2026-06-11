@@ -2,10 +2,12 @@ package com.example.teledrive.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "files",
+    indices = [Index(value = ["telegramMsgId"], unique = true)],
     foreignKeys = [
         ForeignKey(
             entity = Folder::class,

@@ -18,7 +18,7 @@ interface FileDao {
     @Query("SELECT * FROM files WHERE name LIKE '%' || :query || '%'")
     fun searchFiles(query: String): Flow<List<FileEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun createFile(file: FileEntity): Long
 
     @Delete
@@ -29,6 +29,9 @@ interface FileDao {
 
     @Query("UPDATE files SET name = :newName WHERE id = :fileId")
     suspend fun renameFile(fileId: Long, newName: String)
+
+    @Query("UPDATE files SET folderId = :folderId WHERE id = :fileId")
+    suspend fun moveFile(fileId: Long, folderId: Long?)
 
     @Query("SELECT SUM(size) FROM files")
     fun getTotalStorageUsed(): Flow<Long?>

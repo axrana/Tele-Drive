@@ -84,7 +84,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
 
             DetailRow("Telegram Channel ID", channelId?.toString() ?: "N/A")
-            DetailRow("App Version", "1.0.0 (Debug)")
+            DetailRow("App Version", "1.1.0 (Debug)")
 
             Spacer(modifier = Modifier.height(32.dp))
 

@@ -83,6 +83,12 @@ class FileExplorerViewModel(
     private val _uploadProgress = MutableStateFlow<Map<java.util.UUID, Float>>(emptyMap())
     val uploadProgress: StateFlow<Map<java.util.UUID, Float>> = _uploadProgress.asStateFlow()
 
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    val allFolders: StateFlow<List<Folder>> = repository.getAllFolders()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val totalStorageUsed: StateFlow<Long> = repository.getTotalStorageUsed()
         .map { it ?: 0L }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
@@ -105,6 +111,17 @@ class FileExplorerViewModel(
                         repository.updateFile(entity.copy(thumbnailPath = tdFile.local.path))
                     }
                 }
+            }
+        }
+    }
+
+    fun moveFile(file: FileEntity, newFolderId: Long?) {
+        viewModelScope.launch {
+            try {
+                repository.moveFile(file.id, newFolderId)
+                _errorFlow.emit("File moved")
+            } catch (e: Exception) {
+                _errorFlow.emit("Move failed: ${e.message}")
             }
         }
     }
@@ -309,5 +326,20 @@ class FileExplorerViewModel(
 
     fun setSortOrder(order: SortOrder) {
         _sortOrder.value = order
+    }
+
+    fun syncFromTelegram() {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            try {
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+                repository.syncFromTelegram(tdLibraryManager, session.channelId)
+                _errorFlow.emit("Sync completed")
+            } catch (e: Exception) {
+                _errorFlow.emit("Sync failed: ${e.message}")
+            } finally {
+                _isSyncing.value = false
+            }
+        }
     }
 }

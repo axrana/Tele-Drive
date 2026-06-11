@@ -25,6 +25,7 @@ class TeleDriveRepository(
 
     // Folders
     fun getFolders(parentId: Long?): Flow<List<Folder>> = folderDao.getFoldersInParent(parentId)
+    fun getAllFolders(): Flow<List<Folder>> = folderDao.getAllFolders()
     suspend fun createFolder(name: String, parentId: Long?, threadId: Long): Long {
         val folder = Folder(name = name, parentFolderId = parentId, telegramThreadMsgId = threadId, createdDate = System.currentTimeMillis())
         return folderDao.createFolder(folder)
@@ -41,6 +42,7 @@ class TeleDriveRepository(
     suspend fun getFileByTelegramFileId(telegramFileId: String) = fileDao.getFileByTelegramFileId(telegramFileId)
     suspend fun updateFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun renameFile(id: Long, newName: String) = fileDao.renameFile(id, newName)
+    suspend fun moveFile(id: Long, folderId: Long?) = fileDao.moveFile(id, folderId)
     suspend fun deleteFile(file: FileEntity) = fileDao.deleteFile(file)
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
     fun getFileCount(): Flow<Int> = fileDao.getFileCount()
@@ -73,4 +75,66 @@ class TeleDriveRepository(
     // Settings
     fun getSettings(): Flow<com.example.teledrive.data.local.entity.Settings?> = settingsDao.getSettings()
     suspend fun saveSettings(settings: com.example.teledrive.data.local.entity.Settings) = settingsDao.saveSettings(settings)
+
+    suspend fun syncFromTelegram(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long) {
+        var lastMessageId = 0L
+        val limit = 100
+
+        while (true) {
+            val messages = tdLibraryManager.execute(TdApi.GetChatHistory(chatId, lastMessageId, 0, limit, false))
+            if (messages.messages.isEmpty()) break
+
+            messages.messages.forEach { msg ->
+                lastMessageId = msg.id
+
+                when (val content = msg.content) {
+                    is TdApi.MessageDocument -> {
+                        val doc = content.document
+                        // Basic parsing: check if there's a caption with folder info
+                        val caption = (content.caption as? TdApi.FormattedText)?.text ?: ""
+                        val folderId = if (caption.startsWith("TeleDriveFolder:")) {
+                            caption.removePrefix("TeleDriveFolder:").substringBefore(" ").toLongOrNull()
+                        } else null
+
+                        fileDao.createFile(FileEntity(
+                            name = doc.fileName,
+                            size = doc.document.size.toLong(),
+                            mimeType = doc.mimeType,
+                            extension = doc.fileName.substringAfterLast('.', ""),
+                            telegramMsgId = msg.id,
+                            telegramFileId = doc.document.remote.id,
+                            folderId = folderId,
+                            uploadDate = msg.date.toLong() * 1000
+                        ))
+                    }
+                    is TdApi.MessageText -> {
+                        val text = content.text.text
+                        if (text.startsWith("Folder: ")) {
+                            val name = text.removePrefix("Folder: ")
+                            folderDao.createFolder(Folder(
+                                name = name,
+                                telegramThreadMsgId = msg.id,
+                                createdDate = msg.date.toLong() * 1000
+                            ))
+                        }
+                    }
+                }
+            }
+            if (messages.messages.size < limit) break
+        }
+
+        // Also sync forum topics if possible
+        try {
+            val topics = tdLibraryManager.execute(TdApi.GetForumTopics(chatId, "", 0, 0L, 0, 100))
+            topics.topics.forEach { topic ->
+                folderDao.createFolder(Folder(
+                    name = topic.info.name,
+                    telegramThreadMsgId = topic.info.forumTopicId.toLong(),
+                    createdDate = System.currentTimeMillis()
+                ))
+            }
+        } catch (e: Exception) {
+            // Not a forum or other error
+        }
+    }
 }

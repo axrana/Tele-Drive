@@ -15,7 +15,7 @@ interface FolderDao {
     @Query("SELECT * FROM folders WHERE parentFolderId IS :parentId")
     fun getFoldersInParent(parentId: Long?): Flow<List<Folder>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun createFolder(folder: Folder): Long
 
     @Delete

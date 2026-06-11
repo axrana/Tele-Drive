@@ -21,7 +21,7 @@ class TeleDriveApplication : Application(), Configuration.Provider {
 
         val apiId = getString(R.string.telegram_api_id)
         val apiHash = getString(R.string.telegram_api_hash)
-        if (apiId == "YOUR_API_ID_HERE" || apiHash == "YOUR_API_HASH_HERE" || apiId == "0" || apiHash == "none") {
+        if (apiId.contains("YOUR") || apiHash.contains("YOUR") || apiId == "0" || apiHash.isBlank()) {
             Toast.makeText(this, "API ID or HASH not set in strings.xml!", Toast.LENGTH_LONG).show()
             return
         }

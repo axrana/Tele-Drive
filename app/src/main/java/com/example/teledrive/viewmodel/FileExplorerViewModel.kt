@@ -28,6 +28,9 @@ class FileExplorerViewModel(
     private val _errorFlow = MutableSharedFlow<String>()
     val errorFlow: SharedFlow<String> = _errorFlow.asSharedFlow()
 
+    private val _shareLink = MutableSharedFlow<String>()
+    val shareLink: SharedFlow<String> = _shareLink.asSharedFlow()
+
     private val _currentFolderId = MutableStateFlow<Long?>(null)
     val currentFolderId: StateFlow<Long?> = _currentFolderId.asStateFlow()
 
@@ -101,6 +104,14 @@ class FileExplorerViewModel(
     val folderCount: StateFlow<Int> = repository.getFolderCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    init {
+        viewModelScope.launch {
+            repository.getSettings().firstOrNull()?.sortOrder?.let { savedSort ->
+                try { _sortOrder.value = SortOrder.valueOf(savedSort) } catch (e: Exception) {}
+            }
+        }
+    }
+
     fun initDownloadObserver(context: Context) {
         viewModelScope.launch {
             tdLibraryManager.fileUpdates.collect { tdFile ->
@@ -168,21 +179,27 @@ class FileExplorerViewModel(
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
                 val currentParentId = _currentFolderId.value
                 val parentFolder = currentParentId?.let { repository.getFolderById(it) }
-                val parentKey = parentFolder?.telegramThreadMsgId ?: 0L
+                val parentKey = parentFolder?.telegramThreadMsgId
 
-                try {
-                    val topic = tdLibraryManager.execute<TdApi.ForumTopicInfo>(TdApi.CreateForumTopic(session.channelId, name, false, null))
-                    val threadId = topic.forumTopicId.toLong()
-                    val parentThreadId = if (parentKey != 0L) parentKey else null
-                    repository.createFolder(name, currentParentId, threadId, parentThreadId)
-                } catch (e: Exception) {
-                    val folderMarker = if (parentKey != 0L) "Folder:$name Parent:$parentKey" else "Folder: $name"
-                    val formattedText = TdApi.FormattedText(folderMarker, null)
-                    val content = TdApi.InputMessageText(formattedText, null, false)
-                    val message = tdLibraryManager.execute<TdApi.Message>(TdApi.SendMessage(session.channelId, null, null, null, null, content))
-                    val parentThreadId = if (parentKey != 0L) parentKey else null
-                    repository.createFolder(name, currentParentId, message.id, parentThreadId)
+                val folderMarker = if (parentKey != null && parentKey != 0L) {
+                    "Folder:$name Parent:$parentKey"
+                } else {
+                    "Folder: $name"
                 }
+                val formattedText = TdApi.FormattedText()
+                formattedText.text = folderMarker
+
+                val content = TdApi.InputMessageText()
+                content.text = formattedText
+                content.clearDraft = true
+
+                val query = TdApi.SendMessage()
+                query.chatId = session.channelId
+                query.inputMessageContent = content
+
+                val message = tdLibraryManager.execute(query)
+                val parentThreadId = if (parentKey != null && parentKey != 0L) parentKey else null
+                repository.createFolder(name, currentParentId, message.id, parentThreadId)
             } catch (e: Exception) {
                 _errorFlow.emit("Failed to create folder: ${e.message}")
             }
@@ -266,7 +283,7 @@ class FileExplorerViewModel(
             try {
                 val shareManager = com.example.teledrive.data.repository.ShareManager(repository)
                 val link = shareManager.generateShareLink(file, password)
-                _errorFlow.emit("Share link copied: $link")
+                _shareLink.emit(link)
             } catch (e: Exception) {
                 _errorFlow.emit("Sharing failed: ${e.message}")
             }
@@ -353,6 +370,10 @@ class FileExplorerViewModel(
 
     fun setSortOrder(order: SortOrder) {
         _sortOrder.value = order
+        viewModelScope.launch {
+            val current = repository.getSettings().firstOrNull() ?: com.example.teledrive.data.local.entity.Settings()
+            repository.saveSettings(current.copy(sortOrder = order.name))
+        }
     }
 
     fun syncFromTelegram() {

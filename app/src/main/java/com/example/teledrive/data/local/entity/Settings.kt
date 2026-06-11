@@ -8,5 +8,6 @@ data class Settings(
     @PrimaryKey val id: Int = 1,
     val isDarkMode: Boolean = false,
     val shouldCompress: Boolean = false,
-    val autoUpload: Boolean = false
+    val autoUpload: Boolean = false,
+    val sortOrder: String = "DATE"
 )

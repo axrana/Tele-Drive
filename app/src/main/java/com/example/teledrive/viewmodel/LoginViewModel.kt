@@ -36,21 +36,11 @@ class LoginViewModel(
         viewModelScope.launch {
             tdLibraryManager.authorizationState.collect { state ->
                 when (state) {
-                    is TdApi.AuthorizationStateWaitPhoneNumber -> {
-                        _uiState.value = LoginUiState.WaitPhoneNumber
-                    }
-                    is TdApi.AuthorizationStateWaitCode -> {
-                        _uiState.value = LoginUiState.WaitCode
-                    }
-                    is TdApi.AuthorizationStateWaitPassword -> {
-                        _uiState.value = LoginUiState.WaitPassword
-                    }
-                    is TdApi.AuthorizationStateReady -> {
-                        handleLoginSuccess()
-                    }
-                    is TdApi.AuthorizationStateLoggingOut -> {
-                        _uiState.value = LoginUiState.Loading
-                    }
+                    is TdApi.AuthorizationStateWaitPhoneNumber -> _uiState.value = LoginUiState.WaitPhoneNumber
+                    is TdApi.AuthorizationStateWaitCode -> _uiState.value = LoginUiState.WaitCode
+                    is TdApi.AuthorizationStateWaitPassword -> _uiState.value = LoginUiState.WaitPassword
+                    is TdApi.AuthorizationStateReady -> handleLoginSuccess()
+                    is TdApi.AuthorizationStateLoggingOut -> _uiState.value = LoginUiState.Loading
                     else -> {}
                 }
             }
@@ -60,8 +50,15 @@ class LoginViewModel(
     fun submitPhoneNumber(phone: String) {
         _uiState.value = LoginUiState.Loading
         this.phoneNumber = phone
-        val settings = TdApi.PhoneNumberAuthenticationSettings(false, false, false, false, false, null, null)
-        tdLibraryManager.send(TdApi.SetAuthenticationPhoneNumber(phone, settings)) { result ->
+        val settings = TdApi.PhoneNumberAuthenticationSettings()
+        settings.allowFlashCall = false
+        settings.allowSmsRetrieverApi = false
+
+        val query = TdApi.SetAuthenticationPhoneNumber()
+        query.phoneNumber = phone
+        query.settings = settings
+
+        tdLibraryManager.send(query) { result ->
             if (result is TdApi.Error) {
                 _uiState.value = LoginUiState.WaitPhoneNumber
                 viewModelScope.launch { _errorFlow.emit("Failed to send code: ${result.message}") }
@@ -71,7 +68,9 @@ class LoginViewModel(
 
     fun submitCode(code: String) {
         _uiState.value = LoginUiState.Loading
-        tdLibraryManager.send(TdApi.CheckAuthenticationCode(code)) { result ->
+        val query = TdApi.CheckAuthenticationCode()
+        query.code = code
+        tdLibraryManager.send(query) { result ->
             if (result is TdApi.Error) {
                 _uiState.value = LoginUiState.WaitCode
                 viewModelScope.launch { _errorFlow.emit("Invalid code: ${result.message}") }
@@ -81,7 +80,9 @@ class LoginViewModel(
 
     fun submitPassword(password: String) {
         _uiState.value = LoginUiState.Loading
-        tdLibraryManager.send(TdApi.CheckAuthenticationPassword(password)) { result ->
+        val query = TdApi.CheckAuthenticationPassword()
+        query.password = password
+        tdLibraryManager.send(query) { result ->
             if (result is TdApi.Error) {
                 _uiState.value = LoginUiState.WaitPassword
                 viewModelScope.launch { _errorFlow.emit("Wrong password: ${result.message}") }
@@ -90,50 +91,63 @@ class LoginViewModel(
     }
 
     private suspend fun handleLoginSuccess() {
-        val me = tdLibraryManager.execute<TdApi.User>(TdApi.GetMe())
-        val localSession = repository.getUserSession().firstOrNull()
+        try {
+            val me = tdLibraryManager.execute(TdApi.GetMe())
+            val localSession = repository.getUserSession().firstOrNull()
 
-        if (localSession == null) {
-            val chatsResponse = tdLibraryManager.execute<TdApi.Chats>(TdApi.GetChats(null, 100))
-            var existingChannelId: Long? = null
+            if (localSession == null) {
+                val getChatsQuery = TdApi.GetChats()
+                getChatsQuery.chatList = TdApi.ChatListMain()
+                getChatsQuery.limit = 100
 
-            val chatIds = chatsResponse.chatIds
-            if (chatIds != null) {
-                for (id in chatIds) {
-                    try {
-                        val chat = tdLibraryManager.execute<TdApi.Chat>(TdApi.GetChat(id))
-                        if (chat.title != null && chat.title.startsWith("My Cloud Storage_")) {
-                            existingChannelId = chat.id
-                            break
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
+                val chatsResponse = tdLibraryManager.execute(getChatsQuery)
+                var existingChannelId: Long? = null
+                val chatIds = chatsResponse.chatIds
+                if (chatIds != null) {
+                    for (id in chatIds) {
+                        try {
+                            val getChatQuery = TdApi.GetChat()
+                            getChatQuery.chatId = id
+                            val chat = tdLibraryManager.execute(getChatQuery)
+                            if (chat.title != null && chat.title.startsWith("My Cloud Storage_")) {
+                                existingChannelId = chat.id
+                                break
+                            }
+                        } catch (e: Exception) { e.printStackTrace() }
                     }
                 }
-            }
 
-            val channelId = if (existingChannelId != null) {
-                existingChannelId
-            } else {
-                val randomDigits = (100000..999999).random()
-                val channelTitle = "My Cloud Storage_$randomDigits"
-                val chat = tdLibraryManager.execute<TdApi.Chat>(TdApi.CreateNewSupergroupChat(channelTitle, true, true, "Storage for TeleDrive", null, 0, false))
-                chat.id
-            }
+                val channelId = if (existingChannelId != null) {
+                    existingChannelId
+                } else {
+                    val randomDigits = (100000..999999).random()
+                    val createQuery = TdApi.CreateNewSupergroupChat()
+                    createQuery.title = "My Cloud Storage_$randomDigits"
+                    createQuery.isChannel = true
+                    createQuery.description = "Storage for TeleDrive"
 
-            val newSession = UserSession(
-                telegramUserId = me.id,
-                phoneNumber = phoneNumber,
-                username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
-                firstName = me.firstName,
-                lastName = me.lastName,
-                channelId = channelId,
-                channelUsername = null,
-                isPremium = me.isPremium,
-                loginDate = System.currentTimeMillis()
-            )
-            repository.saveSession(newSession)
+                    val chat = tdLibraryManager.execute(createQuery)
+                    chat.id
+                }
+
+                repository.saveSession(
+                    UserSession(
+                        telegramUserId = me.id,
+                        phoneNumber = phoneNumber,
+                        username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
+                        firstName = me.firstName ?: "",
+                        lastName = me.lastName ?: "",
+                        channelId = channelId,
+                        channelUsername = null,
+                        isPremium = me.isPremium,
+                        loginDate = System.currentTimeMillis()
+                    )
+                )
+            }
+            _uiState.value = LoginUiState.LoggedIn
+        } catch (e: Exception) {
+            _errorFlow.emit("Login failed: ${e.message}")
+            _uiState.value = LoginUiState.WaitPhoneNumber
         }
-        _uiState.value = LoginUiState.LoggedIn
     }
 }

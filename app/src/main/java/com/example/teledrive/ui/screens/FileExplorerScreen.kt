@@ -64,14 +64,33 @@ fun FileExplorerScreen(
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            viewModel.uploadFile(context, it, shouldCompress)
+        uri?.let { selectedUri ->
+            val fileSize = try {
+                context.contentResolver.openFileDescriptor(selectedUri, "r")?.use { fd ->
+                    fd.statSize
+                } ?: 0L
+            } catch (e: Exception) { 0L }
+
+            if (fileSize > 2L * 1024 * 1024 * 1024) {
+                Toast.makeText(context, "File too large! Max 2GB. This file: ${formatSize(fileSize)}", Toast.LENGTH_LONG).show()
+                return@let
+            }
+            Toast.makeText(context, "Uploading: ${formatSize(fileSize)}", Toast.LENGTH_SHORT).show()
+            viewModel.uploadFile(context, selectedUri, shouldCompress)
         }
     }
 
     LaunchedEffect(Unit) {
         viewModel.errorFlow.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.shareLink.collect { link ->
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Share Link", link))
+            Toast.makeText(context, "Link copied to clipboard!", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -280,6 +299,14 @@ fun FileExplorerScreen(
                     selectedFileForMenu = null
                 },
                 leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Share") },
+                onClick = {
+                    selectedFileForMenu?.let { viewModel.shareFile(it, null) }
+                    selectedFileForMenu = null
+                },
+                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }
             )
             DropdownMenuItem(
                 text = { Text("Delete") },

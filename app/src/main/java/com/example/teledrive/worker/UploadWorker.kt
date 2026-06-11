@@ -42,11 +42,17 @@ class UploadWorker(
                 }
             }
 
+            val caption = if (folderId != -1L) {
+                TdApi.FormattedText("TeleDriveFolder:$folderId ${file.name}", null)
+            } else {
+                null
+            }
+
             val inputMessage = TdApi.InputMessageDocument(
                 TdApi.InputFileLocal(file.absolutePath),
                 null,
                 false,
-                null
+                caption
             )
 
             val message = tdLibraryManager.execute<TdApi.Message>(

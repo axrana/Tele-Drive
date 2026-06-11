@@ -4,6 +4,8 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -45,6 +47,7 @@ fun FileExplorerScreen(
     val folderCount by viewModel.folderCount.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val uploadProgress by viewModel.uploadProgress.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
     val isGridView by viewModel.isGridView.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
 
@@ -55,6 +58,7 @@ fun FileExplorerScreen(
     var selectedFolderForMenu by remember { mutableStateOf<Folder?>(null) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf<Any?>(null) }
+    var showMoveDialog by remember { mutableStateOf<FileEntity?>(null) }
     var renameInput by remember { mutableStateOf("") }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -76,6 +80,9 @@ fun FileExplorerScreen(
             TopAppBar(
                 title = { Text("Tele Drive") },
                 actions = {
+                    IconButton(onClick = { viewModel.syncFromTelegram() }, enabled = !isSyncing) {
+                        Icon(Icons.Default.Sync, contentDescription = "Sync", modifier = if (isSyncing) Modifier.size(24.dp) else Modifier)
+                    }
                     var showSortMenu by remember { mutableStateOf(false) }
                     IconButton(onClick = { showSortMenu = true }) {
                         Icon(Icons.Default.Sort, contentDescription = "Sort")
@@ -208,7 +215,15 @@ fun FileExplorerScreen(
                 }
             }
 
-            if (folders.isEmpty() && files.isEmpty()) {
+            if (isSyncing) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(16.dp))
+                        Text("Syncing with Telegram...", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            } else if (folders.isEmpty() && files.isEmpty()) {
                 EmptyFolderState(
                     isSearch = searchQuery.isNotEmpty(),
                     onUploadClick = { filePickerLauncher.launch("*/*") }
@@ -257,6 +272,14 @@ fun FileExplorerScreen(
                     showRenameDialog = true
                 },
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Move") },
+                onClick = {
+                    showMoveDialog = selectedFileForMenu
+                    selectedFileForMenu = null
+                },
+                leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) }
             )
             DropdownMenuItem(
                 text = { Text("Delete") },
@@ -384,6 +407,40 @@ fun FileExplorerScreen(
             }
         )
     }
+
+    if (showMoveDialog != null) {
+        val allFolders by viewModel.allFolders.collectAsState()
+        AlertDialog(
+            onDismissRequest = { showMoveDialog = null },
+            title = { Text("Move to Folder") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                    ListItem(
+                        headlineContent = { Text("Home (Root)") },
+                        leadingContent = { Icon(Icons.Default.Home, null) },
+                        modifier = Modifier.combinedClickable(onClick = {
+                            viewModel.moveFile(showMoveDialog!!, null)
+                            showMoveDialog = null
+                        })
+                    )
+                    allFolders.filter { it.id != showMoveDialog?.folderId }.forEach { folder ->
+                        ListItem(
+                            headlineContent = { Text(folder.name) },
+                            leadingContent = { Icon(Icons.Default.Folder, null) },
+                            modifier = Modifier.combinedClickable(onClick = {
+                                viewModel.moveFile(showMoveDialog!!, folder.id)
+                                showMoveDialog = null
+                            })
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showMoveDialog = null }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -498,16 +555,18 @@ fun EmptyFolderState(isSearch: Boolean = false, onUploadClick: () -> Unit) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            if (isSearch) "Try a different search term" else "Upload something to get started",
+                if (isSearch) "Try a different search term" else "Upload or sync to get started",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (!isSearch) {
             Spacer(Modifier.height(24.dp))
-            Button(onClick = onUploadClick) {
-                Icon(Icons.Default.Upload, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Upload File")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onUploadClick) {
+                    Icon(Icons.Default.Upload, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Upload")
+                }
             }
         }
     }

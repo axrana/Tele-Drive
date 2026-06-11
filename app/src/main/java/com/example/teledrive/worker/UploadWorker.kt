@@ -43,7 +43,9 @@ class UploadWorker(
             }
 
             val caption = if (folderId != -1L) {
-                TdApi.FormattedText("TeleDriveFolder:$folderId ${file.name}", null)
+                val folder = repository.getFolderById(folderId)
+                val folderKey = folder?.telegramThreadMsgId ?: folderId
+                TdApi.FormattedText("TeleDriveFolder:$folderKey ${file.name}", null)
             } else {
                 null
             }

@@ -79,7 +79,9 @@ class MainActivity : ComponentActivity() {
                         LoginScreen(loginViewModel)
                     }
                     composable("explorer") {
+                        val context = androidx.compose.ui.platform.LocalContext.current
                         val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
+                        LaunchedEffect(Unit) { explorerViewModel.initDownloadObserver(context) }
                         ExplorerEffect(explorerViewModel, tdLibraryManager)
                         FileExplorerScreen(
                             viewModel = explorerViewModel,
@@ -91,8 +93,10 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("preview/{fileId}") { backStackEntry ->
+                        val context = androidx.compose.ui.platform.LocalContext.current
                         val fileId = backStackEntry.arguments?.getString("fileId")?.toLongOrNull() ?: 0L
                         val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
+                        LaunchedEffect(Unit) { explorerViewModel.initDownloadObserver(context) }
                         FilePreviewScreen(
                             fileId = fileId,
                             viewModel = explorerViewModel,

@@ -12,6 +12,9 @@ interface FolderDao {
     @Query("SELECT * FROM folders WHERE id = :id")
     suspend fun getFolderById(id: Long): Folder?
 
+    @Query("SELECT * FROM folders WHERE telegramThreadMsgId = :msgId")
+    suspend fun getFolderByThreadId(msgId: Long): Folder?
+
     @Query("SELECT * FROM folders WHERE parentFolderId IS :parentId")
     fun getFoldersInParent(parentId: Long?): Flow<List<Folder>>
 

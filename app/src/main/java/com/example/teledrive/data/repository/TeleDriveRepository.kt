@@ -77,55 +77,22 @@ class TeleDriveRepository(
     suspend fun saveSettings(settings: com.example.teledrive.data.local.entity.Settings) = settingsDao.saveSettings(settings)
 
     suspend fun syncFromTelegram(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long) {
-        var lastMessageId = 0L
         val limit = 100
+        val allMessages = mutableListOf<TdApi.Message>()
+        var lastMessageId = 0L
 
+        // 1. Fetch all messages first to parse folders
         while (true) {
             val messages = tdLibraryManager.execute(TdApi.GetChatHistory(chatId, lastMessageId, 0, limit, false))
             if (messages.messages.isEmpty()) break
-
-            messages.messages.forEach { msg ->
-                lastMessageId = msg.id
-
-                when (val content = msg.content) {
-                    is TdApi.MessageDocument -> {
-                        val doc = content.document
-                        // Basic parsing: check if there's a caption with folder info
-                        val caption = (content.caption as? TdApi.FormattedText)?.text ?: ""
-                        val folderId = if (caption.startsWith("TeleDriveFolder:")) {
-                            caption.removePrefix("TeleDriveFolder:").substringBefore(" ").toLongOrNull()
-                        } else null
-
-                        fileDao.createFile(FileEntity(
-                            name = doc.fileName,
-                            size = doc.document.size.toLong(),
-                            mimeType = doc.mimeType,
-                            extension = doc.fileName.substringAfterLast('.', ""),
-                            telegramMsgId = msg.id,
-                            telegramFileId = doc.document.remote.id,
-                            folderId = folderId,
-                            uploadDate = msg.date.toLong() * 1000
-                        ))
-                    }
-                    is TdApi.MessageText -> {
-                        val text = content.text.text
-                        if (text.startsWith("Folder: ")) {
-                            val name = text.removePrefix("Folder: ")
-                            folderDao.createFolder(Folder(
-                                name = name,
-                                telegramThreadMsgId = msg.id,
-                                createdDate = msg.date.toLong() * 1000
-                            ))
-                        }
-                    }
-                }
-            }
+            allMessages.addAll(messages.messages)
+            lastMessageId = messages.messages.last().id
             if (messages.messages.size < limit) break
         }
 
-        // Also sync forum topics if possible
+        // 2. Sync Forum Topics (Parents)
         try {
-            val topics = tdLibraryManager.execute(TdApi.GetForumTopics(chatId, "", 0, 0L, 0, 100))
+            val topics = tdLibraryManager.execute(TdApi.GetForumTopics(chatId, "", 0, 0, 0, 100))
             topics.topics.forEach { topic ->
                 folderDao.createFolder(Folder(
                     name = topic.info.name,
@@ -133,8 +100,47 @@ class TeleDriveRepository(
                     createdDate = System.currentTimeMillis()
                 ))
             }
-        } catch (e: Exception) {
-            // Not a forum or other error
+        } catch (e: Exception) {}
+
+        // 3. Sync Folder Text Messages (Parents)
+        allMessages.forEach { msg ->
+            if (msg.content is TdApi.MessageText) {
+                val text = (msg.content as TdApi.MessageText).text.text
+                if (text.startsWith("Folder: ")) {
+                    folderDao.createFolder(Folder(
+                        name = text.removePrefix("Folder: "),
+                        telegramThreadMsgId = msg.id,
+                        createdDate = msg.date.toLong() * 1000
+                    ))
+                }
+            }
+        }
+
+        // 4. Sync Files (Children)
+        allMessages.forEach { msg ->
+            if (msg.content is TdApi.MessageDocument) {
+                val docContent = msg.content as TdApi.MessageDocument
+                val doc = docContent.document
+                val caption = (docContent.caption as? TdApi.FormattedText)?.text ?: ""
+
+                // Stable mapping: Find local folder ID using Telegram Thread/Message ID
+                val telegramFolderId = if (caption.startsWith("TeleDriveFolder:")) {
+                    caption.removePrefix("TeleDriveFolder:").substringBefore(" ").toLongOrNull()
+                } else null
+
+                val localFolderId = telegramFolderId?.let { folderDao.getFolderByThreadId(it)?.id }
+
+                fileDao.createFile(FileEntity(
+                    name = doc.fileName,
+                    size = doc.document.size.toLong(),
+                    mimeType = doc.mimeType,
+                    extension = doc.fileName.substringAfterLast('.', ""),
+                    telegramMsgId = msg.id,
+                    telegramFileId = doc.document.remote.id,
+                    folderId = localFolderId, // Using the resolved local ID
+                    uploadDate = msg.date.toLong() * 1000
+                ))
+            }
         }
     }
 }

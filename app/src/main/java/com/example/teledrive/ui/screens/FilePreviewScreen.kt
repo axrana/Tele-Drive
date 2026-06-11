@@ -11,6 +11,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +29,15 @@ fun FilePreviewScreen(
     onBack: () -> Unit
 ) {
     val file by viewModel.getFileById(fileId).collectAsState(initial = null)
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.shareLink.collect { link ->
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Share Link", link))
+            android.widget.Toast.makeText(context, "Link copied to clipboard!", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -54,14 +66,33 @@ fun FilePreviewScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (currentFile.mimeType?.startsWith("image/") == true && currentFile.thumbnailPath != null) {
-                    AsyncImage(
-                        model = currentFile.thumbnailPath,
-                        contentDescription = null,
+                    var scale by remember { mutableStateOf(1f) }
+                    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(240.dp),
-                        contentScale = ContentScale.Fit
-                    )
+                            .height(300.dp)
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    scale = (scale * zoom).coerceIn(1f, 5f)
+                                    offset = offset + pan
+                                }
+                            }
+                    ) {
+                        AsyncImage(
+                            model = currentFile.thumbnailPath,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(
+                                    scaleX = scale,
+                                    scaleY = scale,
+                                    translationX = offset.x,
+                                    translationY = offset.y
+                                ),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
                 } else {
                     Icon(
                         getFileIcon(currentFile.mimeType, currentFile.extension),

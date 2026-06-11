@@ -17,7 +17,10 @@ class TeleDriveWorkerFactory(
         workerParameters: WorkerParameters
     ): ListenableWorker? {
         return when (workerClassName) {
-            UploadWorker::class.java.name -> UploadWorker(appContext, workerParameters, tdLibraryManager, repository)
+            UploadWorker::class.java.name ->
+                UploadWorker(appContext, workerParameters, tdLibraryManager, repository)
+            DownloadWorker::class.java.name ->
+                DownloadWorker(appContext, workerParameters, tdLibraryManager, repository)
             else -> null
         }
     }

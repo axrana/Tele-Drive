@@ -40,6 +40,7 @@ abstract class TeleDriveDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE folders ADD COLUMN syncState INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE folders ADD COLUMN isDirty INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE folders ADD COLUMN metadataVersion INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE settings ADD COLUMN sortOrder TEXT NOT NULL DEFAULT 'DATE'")
 
                 // Create transfers table
                 db.execSQL("""

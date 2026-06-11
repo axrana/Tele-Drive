@@ -19,7 +19,6 @@ class TdLibraryManager(private val context: Context) {
 
     val errorFlow = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val fileUpdates = MutableSharedFlow<TdApi.File>(extraBufferCapacity = 64)
-
     val updateFlow = MutableSharedFlow<TdApi.Object>(extraBufferCapacity = 100)
 
     init { initializeClient() }
@@ -27,7 +26,7 @@ class TdLibraryManager(private val context: Context) {
     @Synchronized
     private fun initializeClient() {
         if (client != null) return
-        val updateHandler = Client.ResultHandler { obj ->
+        client = Client.create({ obj ->
             scope.launch { updateFlow.emit(obj) }
             if (obj is TdApi.UpdateAuthorizationState) {
                 _authorizationState.value = obj.authorizationState
@@ -35,29 +34,27 @@ class TdLibraryManager(private val context: Context) {
             } else if (obj is TdApi.UpdateFile) {
                 scope.launch { fileUpdates.emit(obj.file) }
             }
-        }
-        client = Client.create(updateHandler, null, null)
+        }, null, null)
     }
 
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
         if (state is TdApi.AuthorizationStateWaitTdlibParameters) {
-            val params = TdApi.SetTdlibParameters()
-            params.useTestDc = false
-            params.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
-            params.filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
-            params.databaseEncryptionKey = "".toByteArray()
-            params.useFileDatabase = true
-            params.useChatInfoDatabase = true
-            params.useMessageDatabase = true
-            params.useSecretChats = false
-            params.apiId = context.getString(R.string.telegram_api_id).let { if (it == "YOURAPIIDHERE") 0 else it.toInt() }
-            params.apiHash = context.getString(R.string.telegram_api_hash)
-            params.systemLanguageCode = "en"
-            params.deviceModel = "Android"
-            params.systemVersion = "1.0"
-            params.applicationVersion = "1.0"
-
-            send(params)
+            val parameters = TdApi.SetTdlibParameters()
+            parameters.useTestDc = false
+            parameters.databaseDirectory = File(context.filesDir, "tdlib").absolutePath
+            parameters.filesDirectory = File(context.filesDir, "tdlib_files").absolutePath
+            parameters.useFileDatabase = true
+            parameters.useChatInfoDatabase = true
+            parameters.useMessageDatabase = true
+            parameters.useSecretChats = false
+            val rawApiId = context.getString(R.string.telegram_api_id)
+            parameters.apiId = if (rawApiId == "YOURAPIIDHERE" || rawApiId == "0") 0 else rawApiId.toIntOrNull() ?: 0
+            parameters.apiHash = context.getString(R.string.telegram_api_hash)
+            parameters.systemLanguageCode = "en"
+            parameters.deviceModel = "Android"
+            parameters.systemVersion = "1.0"
+            parameters.applicationVersion = "1.1"
+            send(parameters)
         }
     }
 
@@ -69,25 +66,35 @@ class TdLibraryManager(private val context: Context) {
         client?.send(query) { result ->
             if (result is TdApi.Error) {
                 scope.launch { errorFlow.emit(result.message) }
-                cont.resumeWithException(Exception(result.message))
+                cont.resumeWithException(Exception("${result.code}: ${result.message}"))
             } else {
                 @Suppress("UNCHECKED_CAST")
                 cont.resume(result as T)
             }
-        }
+        } ?: cont.resumeWithException(Exception("TDLib client not initialized"))
     }
 
     fun submitPhoneNumber(phone: String) {
-        val settings = TdApi.PhoneNumberAuthenticationSettings(false, false, false, false, false, null, null)
-        send(TdApi.SetAuthenticationPhoneNumber(phone, settings))
+        val settings = TdApi.PhoneNumberAuthenticationSettings()
+        settings.allowFlashCall = false
+        settings.allowSmsRetrieverApi = false
+
+        val query = TdApi.SetAuthenticationPhoneNumber()
+        query.phoneNumber = phone
+        query.settings = settings
+        send(query)
     }
 
     fun submitCode(code: String) {
-        send(TdApi.CheckAuthenticationCode(code))
+        val query = TdApi.CheckAuthenticationCode()
+        query.code = code
+        send(query)
     }
 
     fun submitPassword(password: String) {
-        send(TdApi.CheckAuthenticationPassword(password))
+        val query = TdApi.CheckAuthenticationPassword()
+        query.password = password
+        send(query)
     }
 
     fun logOut() {

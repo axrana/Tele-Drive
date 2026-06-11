@@ -7,7 +7,10 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "files",
-    indices = [Index(value = ["telegramMsgId"], unique = true)],
+    indices = [
+        Index(value = ["telegramMsgId"], unique = true),
+        Index(value = ["folderId"])
+    ],
     foreignKeys = [
         ForeignKey(
             entity = Folder::class,

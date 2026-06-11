@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,7 +32,8 @@ import java.util.*
 fun FileExplorerScreen(
     viewModel: FileExplorerViewModel,
     shouldCompress: Boolean,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onFileClick: (FileEntity) -> Unit
 ) {
     val context = LocalContext.current
     val folders by viewModel.folders.collectAsState()
@@ -39,7 +41,12 @@ fun FileExplorerScreen(
     val breadcrumb by viewModel.breadcrumb.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val totalStorageUsed by viewModel.totalStorageUsed.collectAsState()
+    val fileCount by viewModel.fileCount.collectAsState()
+    val folderCount by viewModel.folderCount.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val uploadProgress by viewModel.uploadProgress.collectAsState()
+    val isGridView by viewModel.isGridView.collectAsState()
+    val sortOrder by viewModel.sortOrder.collectAsState()
 
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var folderNameInput by remember { mutableStateOf("") }
@@ -47,6 +54,7 @@ fun FileExplorerScreen(
     var selectedFileForMenu by remember { mutableStateOf<FileEntity?>(null) }
     var selectedFolderForMenu by remember { mutableStateOf<Folder?>(null) }
     var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf<Any?>(null) }
     var renameInput by remember { mutableStateOf("") }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -68,6 +76,30 @@ fun FileExplorerScreen(
             TopAppBar(
                 title = { Text("Tele Drive") },
                 actions = {
+                    var showSortMenu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showSortMenu = true }) {
+                        Icon(Icons.Default.Sort, contentDescription = "Sort")
+                    }
+                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                        FileExplorerViewModel.SortOrder.values().forEach { order ->
+                            DropdownMenuItem(
+                                text = { Text(order.name.lowercase().capitalize()) },
+                                onClick = {
+                                    viewModel.setSortOrder(order)
+                                    showSortMenu = false
+                                },
+                                leadingIcon = {
+                                    if (sortOrder == order) Icon(Icons.Default.Check, null)
+                                }
+                            )
+                        }
+                    }
+                    IconButton(onClick = { viewModel.toggleViewMode() }) {
+                        Icon(
+                            if (isGridView) Icons.Default.ViewList else Icons.Default.ViewModule,
+                            contentDescription = "Toggle View"
+                        )
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -76,22 +108,40 @@ fun FileExplorerScreen(
         },
         bottomBar = {
             Column {
-                if (downloadProgress.isNotEmpty()) {
-                    val progress = downloadProgress.values.average().toFloat()
+                if (downloadProgress.isNotEmpty() || uploadProgress.isNotEmpty()) {
+                    val totalProgress = (downloadProgress.values + uploadProgress.values).average().toFloat()
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
-                        progress = { progress }
+                        progress = { totalProgress }
                     )
                 }
                 Surface(
                     tonalElevation = 2.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Storage used: ${formatSize(totalStorageUsed)} used",
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Storage: ${formatSize(totalStorageUsed)}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "$folderCount Folders, $fileCount Files",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // Progress bar for storage (assuming 50GB limit as per memory)
+                        val storageLimit = 50L * 1024 * 1024 * 1024
+                        LinearProgressIndicator(
+                            progress = { (totalStorageUsed.toFloat() / storageLimit).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
@@ -158,30 +208,34 @@ fun FileExplorerScreen(
                 }
             }
 
-            // Grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(folders) { folder ->
-                    FolderItem(
-                        folder = folder,
-                        onClick = { viewModel.navigateToFolder(folder) },
-                        onLongClick = {
-                            selectedFolderForMenu = folder
-                        }
-                    )
-                }
-                items(files) { file ->
-                    FileItem(
-                        file = file,
-                        onLongClick = {
-                            selectedFileForMenu = file
-                        }
-                    )
+            if (folders.isEmpty() && files.isEmpty()) {
+                EmptyFolderState(onUploadClick = { filePickerLauncher.launch("*/*") })
+            } else {
+                LazyVerticalGrid(
+                    columns = if (isGridView) GridCells.Fixed(2) else GridCells.Fixed(1),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(folders) { folder ->
+                        FolderItem(
+                            folder = folder,
+                            onClick = { viewModel.navigateToFolder(folder) },
+                            onLongClick = {
+                                selectedFolderForMenu = folder
+                            }
+                        )
+                    }
+                    items(files) { file ->
+                        FileItem(
+                            file = file,
+                            onClick = { onFileClick(file) },
+                            onLongClick = {
+                                selectedFileForMenu = file
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -200,6 +254,14 @@ fun FileExplorerScreen(
                     showRenameDialog = true
                 },
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Delete") },
+                onClick = {
+                    showDeleteConfirmation = selectedFolderForMenu
+                    selectedFolderForMenu = null
+                },
+                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
             )
         }
     }
@@ -220,7 +282,7 @@ fun FileExplorerScreen(
             DropdownMenuItem(
                 text = { Text("Delete") },
                 onClick = {
-                    selectedFileForMenu?.let { viewModel.deleteFile(it) }
+                    showDeleteConfirmation = selectedFileForMenu
                     selectedFileForMenu = null
                 },
                 leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
@@ -278,6 +340,44 @@ fun FileExplorerScreen(
                         selectedFolderForMenu = null
                     }
                 }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRenameDialog = false
+                    selectedFileForMenu = null
+                    selectedFolderForMenu = null
+                }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeleteConfirmation != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = null },
+            title = { Text("Delete") },
+            text = {
+                val name = when (val item = showDeleteConfirmation) {
+                    is FileEntity -> item.name
+                    is Folder -> item.name
+                    else -> ""
+                }
+                Text("Are you sure you want to delete '$name'? This action cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when (val item = showDeleteConfirmation) {
+                        is FileEntity -> viewModel.deleteFile(item)
+                        is Folder -> viewModel.deleteFolder(item)
+                    }
+                    showDeleteConfirmation = null
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = null }) {
+                    Text("Cancel")
+                }
             }
         )
     }
@@ -286,7 +386,7 @@ fun FileExplorerScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FolderItem(folder: Folder, onClick: () -> Unit, onLongClick: () -> Unit) {
-    Card(
+    ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
@@ -298,21 +398,36 @@ fun FolderItem(folder: Folder, onClick: () -> Unit, onLongClick: () -> Unit) {
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(
+                Icons.Default.Folder,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
             Spacer(Modifier.height(8.dp))
-            Text(folder.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                folder.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                formatDate(folder.createdDate),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FileItem(file: FileEntity, onLongClick: () -> Unit) {
-    Card(
+fun FileItem(file: FileEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
+    ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = { /* Could implement preview/download */ },
+                onClick = onClick,
                 onLongClick = onLongClick
             )
     ) {
@@ -320,12 +435,95 @@ fun FileItem(file: FileEntity, onLongClick: () -> Unit) {
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, modifier = Modifier.size(48.dp))
+            Icon(
+                getFileIcon(file.mimeType, file.extension),
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.secondary
+            )
             Spacer(Modifier.height(8.dp))
-            Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(formatSize(file.size), style = MaterialTheme.typography.bodySmall)
+            Text(
+                file.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    formatSize(file.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "•",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    formatDate(file.uploadDate),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
+}
+
+@Composable
+fun EmptyFolderState(onUploadClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            Icons.Default.CloudOff,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = MaterialTheme.colorScheme.outline
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "No files in this folder yet",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Upload something to get started",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onUploadClick) {
+            Icon(Icons.Default.Upload, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Upload File")
+        }
+    }
+}
+
+fun getFileIcon(mimeType: String?, extension: String?): ImageVector {
+    return when {
+        mimeType?.startsWith("image/") == true -> Icons.Default.Image
+        mimeType?.startsWith("video/") == true -> Icons.Default.VideoLibrary
+        mimeType?.startsWith("audio/") == true -> Icons.Default.AudioFile
+        mimeType == "application/pdf" -> Icons.Default.PictureAsPdf
+        extension?.lowercase() == "pdf" -> Icons.Default.PictureAsPdf
+        extension?.lowercase() in listOf("zip", "rar", "7z", "tar", "gz") -> Icons.Default.Inventory
+        else -> Icons.AutoMirrored.Filled.InsertDriveFile
+    }
+}
+
+fun formatDate(timestamp: Long): String {
+    val date = java.util.Date(timestamp)
+    val format = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+    return format.format(date)
 }
 
 fun formatSize(size: Long): String {

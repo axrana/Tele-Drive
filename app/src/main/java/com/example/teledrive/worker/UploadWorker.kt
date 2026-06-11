@@ -3,11 +3,15 @@ package com.example.teledrive.worker
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.repository.TeleDriveRepository
 import com.example.teledrive.tdlib.TdLibraryManager
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collect
 import org.drinkless.tdlib.TdApi
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import java.io.File
 
 class UploadWorker(
@@ -17,14 +21,26 @@ class UploadWorker(
     private val repository: TeleDriveRepository
 ) : CoroutineWorker(context, params) {
 
-    override suspend fun doWork(): Result {
-        val path = inputData.getString("filepath") ?: return Result.failure()
+    override suspend fun doWork(): Result = coroutineScope {
+        val path = inputData.getString("filepath") ?: return@coroutineScope Result.failure()
         val folderId = inputData.getLong("folderid", -1L)
         val file = File(path)
-        if (!file.exists()) return Result.failure()
+        if (!file.exists()) return@coroutineScope Result.failure()
 
-        return try {
-            val session = repository.getUserSession().firstOrNull() ?: return Result.failure()
+        try {
+            val session = repository.getUserSession().firstOrNull() ?: return@coroutineScope Result.failure()
+
+            // Track progress via TdLibraryManager.fileUpdates
+            val progressJob = launch {
+                tdLibraryManager.fileUpdates.collect { tdFile ->
+                    if (tdFile.local.path == file.absolutePath) {
+                        val progress = if (tdFile.size > 0) {
+                            tdFile.local.downloadedSize.toFloat() / tdFile.size
+                        } else 0f
+                        setProgress(workDataOf("progress" to progress))
+                    }
+                }
+            }
 
             val inputMessage = TdApi.InputMessageDocument(
                 TdApi.InputFileLocal(file.absolutePath),
@@ -37,6 +53,8 @@ class UploadWorker(
                 TdApi.SendMessage(session.channelId, null, null, null, null, inputMessage)
             )
 
+            progressJob.cancel()
+
             val docContent = message.content as TdApi.MessageDocument
             repository.createFile(FileEntity(
                 name = file.name,
@@ -45,12 +63,13 @@ class UploadWorker(
                 extension = file.extension,
                 telegramMsgId = message.id,
                 telegramFileId = docContent.document.document.remote.id,
-                folderId = folderId,
+                folderId = if (folderId == -1L) null else folderId,
                 uploadDate = System.currentTimeMillis()
             ))
             Result.success()
         } catch (e: Exception) {
-            Result.retry()
+            tdLibraryManager.errorFlow.emit("Upload failed for ${file.name}: ${e.message}")
+            Result.failure()
         }
     }
 }

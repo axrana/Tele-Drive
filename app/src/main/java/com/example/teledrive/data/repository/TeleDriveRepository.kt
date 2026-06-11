@@ -38,13 +38,29 @@ class TeleDriveRepository(
     fun searchFiles(query: String): Flow<List<FileEntity>> = fileDao.searchFiles(query)
     suspend fun createFile(file: FileEntity) = fileDao.createFile(file)
     suspend fun getFileById(id: Long) = fileDao.getFileById(id)
+    suspend fun getFileByTelegramFileId(telegramFileId: String) = fileDao.getFileByTelegramFileId(telegramFileId)
+    suspend fun updateFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun renameFile(id: Long, newName: String) = fileDao.renameFile(id, newName)
     suspend fun deleteFile(file: FileEntity) = fileDao.deleteFile(file)
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
+    fun getFileCount(): Flow<Int> = fileDao.getFileCount()
+    fun getFolderCount(): Flow<Int> = folderDao.getFolderCount()
 
     // Telegram-side delete
     suspend fun deleteFileFromTelegram(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long, messageId: Long) {
-        tdLibraryManager.execute(TdApi.DeleteMessages(chatId, longArrayOf(messageId), true))
+        if (messageId != 0L) {
+            tdLibraryManager.execute(TdApi.DeleteMessages(chatId, longArrayOf(messageId), true))
+        }
+    }
+
+    suspend fun deleteFolderWithContents(tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager, chatId: Long, folder: Folder) {
+        val filesInFolder = fileDao.getFilesInFolderSync(folder.id)
+        val messageIds = filesInFolder.map { it.telegramMsgId }.filter { it != 0L }.toLongArray()
+        if (messageIds.isNotEmpty()) {
+            tdLibraryManager.execute(TdApi.DeleteMessages(chatId, messageIds, true))
+        }
+        fileDao.deleteFilesInFolder(folder.id)
+        folderDao.deleteFolder(folder)
     }
 
     // Sharing

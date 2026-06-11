@@ -20,12 +20,15 @@ class TdLibraryManager(private val context: Context) {
     val errorFlow = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val fileUpdates = MutableSharedFlow<TdApi.File>(extraBufferCapacity = 64)
 
+    val updateFlow = MutableSharedFlow<TdApi.Object>(extraBufferCapacity = 100)
+
     init { initializeClient() }
 
     @Synchronized
     private fun initializeClient() {
         if (client != null) return
         val updateHandler = Client.ResultHandler { obj ->
+            scope.launch { updateFlow.emit(obj) }
             if (obj is TdApi.UpdateAuthorizationState) {
                 _authorizationState.value = obj.authorizationState
                 handleAuthorizationState(obj.authorizationState)
@@ -65,6 +68,7 @@ class TdLibraryManager(private val context: Context) {
     suspend fun <T : TdApi.Object> execute(query: TdApi.Function<T>): T = suspendCancellableCoroutine { cont ->
         client?.send(query) { result ->
             if (result is TdApi.Error) {
+                scope.launch { errorFlow.emit(result.message) }
                 cont.resumeWithException(Exception(result.message))
             } else {
                 @Suppress("UNCHECKED_CAST")

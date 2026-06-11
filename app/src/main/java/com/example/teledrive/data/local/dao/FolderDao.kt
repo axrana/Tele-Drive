@@ -26,4 +26,7 @@ interface FolderDao {
 
     @Query("UPDATE folders SET name = :newName WHERE id = :folderId")
     suspend fun renameFolder(folderId: Long, newName: String)
+
+    @Query("SELECT COUNT(*) FROM folders")
+    fun getFolderCount(): Flow<Int>
 }

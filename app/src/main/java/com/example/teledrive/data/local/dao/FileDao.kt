@@ -12,6 +12,9 @@ interface FileDao {
     @Query("SELECT * FROM files WHERE id = :id")
     suspend fun getFileById(id: Long): FileEntity?
 
+    @Query("SELECT * FROM files WHERE telegramFileId = :telegramFileId")
+    suspend fun getFileByTelegramFileId(telegramFileId: String): FileEntity?
+
     @Query("SELECT * FROM files WHERE name LIKE '%' || :query || '%'")
     fun searchFiles(query: String): Flow<List<FileEntity>>
 
@@ -29,4 +32,13 @@ interface FileDao {
 
     @Query("SELECT SUM(size) FROM files")
     fun getTotalStorageUsed(): Flow<Long?>
+
+    @Query("DELETE FROM files WHERE folderId = :folderId")
+    suspend fun deleteFilesInFolder(folderId: Long)
+
+    @Query("SELECT COUNT(*) FROM files")
+    fun getFileCount(): Flow<Int>
+
+    @Query("SELECT * FROM files WHERE folderId = :folderId")
+    suspend fun getFilesInFolderSync(folderId: Long?): List<FileEntity>
 }

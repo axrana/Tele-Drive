@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.BackoffPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.example.teledrive.data.local.entity.FileEntity
@@ -33,31 +34,64 @@ class FileExplorerViewModel(
     private val _breadcrumb = MutableStateFlow<List<Folder>>(emptyList())
     val breadcrumb: StateFlow<List<Folder>> = _breadcrumb.asStateFlow()
 
+    enum class SortOrder { NAME, DATE, SIZE, OLDEST }
+    private val _sortOrder = MutableStateFlow(SortOrder.DATE)
+    val sortOrder: StateFlow<SortOrder> = _sortOrder.asStateFlow()
+
+    private val _isGridView = MutableStateFlow(true)
+    val isGridView: StateFlow<Boolean> = _isGridView.asStateFlow()
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    val folders = _currentFolderId.flatMapLatest { id ->
-        repository.getFolders(id)
+    val folders = combine(_currentFolderId, _sortOrder) { id, sort ->
+        id to sort
+    }.flatMapLatest { (id, sort) ->
+        repository.getFolders(id).map { list ->
+            when (sort) {
+                SortOrder.NAME -> list.sortedBy { it.name }
+                SortOrder.DATE -> list.sortedByDescending { it.createdDate }
+                SortOrder.OLDEST -> list.sortedBy { it.createdDate }
+                SortOrder.SIZE -> list
+            }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val files = combine(_currentFolderId, _searchQuery) { folderId, query ->
-        query to folderId
-    }.flatMapLatest { (query, folderId) ->
-        if (query.isNotEmpty()) {
+    val files = combine(_currentFolderId, _searchQuery, _sortOrder) { folderId, query, sort ->
+        Triple(folderId, query, sort)
+    }.flatMapLatest { (folderId, query, sort) ->
+        val flow = if (query.isNotEmpty()) {
             repository.searchFiles(query)
         } else {
             repository.getFiles(folderId)
+        }
+        flow.map { list ->
+            when (sort) {
+                SortOrder.NAME -> list.sortedBy { it.name }
+                SortOrder.DATE -> list.sortedByDescending { it.uploadDate }
+                SortOrder.OLDEST -> list.sortedBy { it.uploadDate }
+                SortOrder.SIZE -> list.sortedByDescending { it.size }
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
     val downloadProgress: StateFlow<Map<String, Float>> = _downloadProgress.asStateFlow()
 
+    private val _uploadProgress = MutableStateFlow<Map<java.util.UUID, Float>>(emptyMap())
+    val uploadProgress: StateFlow<Map<java.util.UUID, Float>> = _uploadProgress.asStateFlow()
+
     val totalStorageUsed: StateFlow<Long> = repository.getTotalStorageUsed()
         .map { it ?: 0L }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    val fileCount: StateFlow<Int> = repository.getFileCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val folderCount: StateFlow<Int> = repository.getFolderCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     init {
         viewModelScope.launch {
@@ -65,6 +99,11 @@ class FileExplorerViewModel(
                 if (tdFile.local.downloadedSize > 0) {
                     val progress = tdFile.local.downloadedSize.toFloat() / tdFile.size
                     _downloadProgress.value = _downloadProgress.value + (tdFile.remote.id to progress)
+                }
+                if (tdFile.local.isDownloadingCompleted) {
+                    repository.getFileByTelegramFileId(tdFile.remote.id)?.let { entity ->
+                        repository.updateFile(entity.copy(thumbnailPath = tdFile.local.path))
+                    }
                 }
             }
         }
@@ -113,10 +152,7 @@ class FileExplorerViewModel(
     fun uploadFile(context: Context, uri: android.net.Uri, shouldCompress: Boolean) {
         viewModelScope.launch {
             try {
-                val folderId = _currentFolderId.value ?: run {
-                    _errorFlow.emit("No folder selected")
-                    return@launch
-                }
+                val folderId = _currentFolderId.value
                 val realFile = com.example.teledrive.util.UriUtils.getFileFromUri(context, uri)
                     ?: run {
                         _errorFlow.emit("Could not read file")
@@ -130,14 +166,36 @@ class FileExplorerViewModel(
                     .setInputData(
                         workDataOf(
                             "filepath" to realFile.absolutePath,
-                            "folderid" to folderId,
+                            "folderid" to (folderId ?: -1L),
                             "shouldcompress" to shouldCompress
                         )
                     )
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
+                    .addTag("upload")
                     .build()
+
                 WorkManager.getInstance(context).enqueue(workRequest)
-                _errorFlow.emit("Upload started: ${realFile.name}")
+
+                // Observe progress
+                WorkManager.getInstance(context)
+                    .getWorkInfoByIdFlow(workRequest.id)
+                    .collect { workInfo ->
+                        if (workInfo != null) {
+                            when (workInfo.state) {
+                                WorkInfo.State.RUNNING -> {
+                                    val progress = workInfo.progress.getFloat("progress", 0f)
+                                    _uploadProgress.value = _uploadProgress.value + (workRequest.id to progress)
+                                }
+                                WorkInfo.State.SUCCEEDED, WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> {
+                                    _uploadProgress.value = _uploadProgress.value - workRequest.id
+                                    if (workInfo.state == WorkInfo.State.SUCCEEDED) {
+                                        _errorFlow.emit("Upload successful: ${realFile.name}")
+                                    }
+                                }
+                                else -> {}
+                            }
+                        }
+                    }
             } catch (e: Exception) {
                 _errorFlow.emit("Upload failed: ${e.message}")
             }
@@ -147,7 +205,11 @@ class FileExplorerViewModel(
     fun downloadFile(fileEntity: FileEntity) {
         viewModelScope.launch {
             try {
-                val file = tdLibraryManager.execute<TdApi.File>(TdApi.GetRemoteFile(fileEntity.telegramFileId, null))
+                val file = if (fileEntity.telegramFileId.isNotEmpty()) {
+                    tdLibraryManager.execute<TdApi.File>(TdApi.GetRemoteFile(fileEntity.telegramFileId, null))
+                } else {
+                    tdLibraryManager.execute<TdApi.File>(TdApi.GetFile(fileEntity.telegramMsgId.toInt())) // Fallback
+                }
                 tdLibraryManager.send(TdApi.DownloadFile(file.id, 1, 0, 0, false))
             } catch (e: Exception) {
                 _errorFlow.emit("Download failed: ${e.message}")
@@ -216,6 +278,10 @@ class FileExplorerViewModel(
         }
     }
 
+    fun getFileById(id: Long): Flow<FileEntity?> = flow {
+        emit(repository.getFileById(id))
+    }
+
     fun renameFolder(folder: Folder, newName: String) {
         viewModelScope.launch {
             try {
@@ -224,5 +290,24 @@ class FileExplorerViewModel(
                 _errorFlow.emit("Rename failed: ${e.message}")
             }
         }
+    }
+
+    fun deleteFolder(folder: Folder) {
+        viewModelScope.launch {
+            try {
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+                repository.deleteFolderWithContents(tdLibraryManager, session.channelId, folder)
+            } catch (e: Exception) {
+                _errorFlow.emit("Delete folder failed: ${e.message}")
+            }
+        }
+    }
+
+    fun toggleViewMode() {
+        _isGridView.value = !_isGridView.value
+    }
+
+    fun setSortOrder(order: SortOrder) {
+        _sortOrder.value = order
     }
 }

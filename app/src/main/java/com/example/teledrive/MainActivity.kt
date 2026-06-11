@@ -12,6 +12,7 @@ import com.example.teledrive.ui.screens.FileExplorerScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.teledrive.ui.screens.LoginScreen
 import com.example.teledrive.ui.screens.SettingsScreen
+import com.example.teledrive.ui.screens.FilePreviewScreen
 import com.example.teledrive.ui.theme.TeleDriveTheme
 import com.example.teledrive.viewmodel.FileExplorerViewModel
 import com.example.teledrive.viewmodel.LoginViewModel
@@ -83,13 +84,26 @@ class MainActivity : ComponentActivity() {
                         FileExplorerScreen(
                             viewModel = explorerViewModel,
                             shouldCompress = persistentSettings?.shouldCompress ?: false,
-                            onOpenSettings = { navController.navigate("settings") }
+                            onOpenSettings = { navController.navigate("settings") },
+                            onFileClick = { file ->
+                                navController.navigate("preview/${file.id}")
+                            }
+                        )
+                    }
+                    composable("preview/{fileId}") { backStackEntry ->
+                        val fileId = backStackEntry.arguments?.getString("fileId")?.toLongOrNull() ?: 0L
+                        val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
+                        FilePreviewScreen(
+                            fileId = fileId,
+                            viewModel = explorerViewModel,
+                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable("settings") {
                         val scope = rememberCoroutineScope()
                         SettingsScreen(
                             settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
+                            channelId = userSession?.channelId,
                             onSettingsChange = { newSettings ->
                                 scope.launch {
                                     repository.saveSettings(newSettings)

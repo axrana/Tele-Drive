@@ -25,5 +25,6 @@ data class Folder(
     val name: String,
     val parentFolderId: Long? = null,
     val telegramThreadMsgId: Long,
+    val telegramParentThreadId: Long? = null,
     val createdDate: Long
 )

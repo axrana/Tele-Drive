@@ -12,7 +12,7 @@ interface FileDao {
     @Query("SELECT * FROM files WHERE id = :id")
     suspend fun getFileById(id: Long): FileEntity?
 
-    @Query("SELECT * FROM files WHERE telegramFileId = :telegramFileId")
+    @Query("SELECT * FROM files WHERE telegramFileId = :telegramFileId LIMIT 1")
     suspend fun getFileByTelegramFileId(telegramFileId: String): FileEntity?
 
     @Query("SELECT * FROM files WHERE name LIKE '%' || :query || '%'")

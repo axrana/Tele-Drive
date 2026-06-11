@@ -80,6 +80,8 @@ class FileExplorerViewModel(
     private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
     val downloadProgress: StateFlow<Map<String, Float>> = _downloadProgress.asStateFlow()
 
+    private val _pendingDownloads = MutableStateFlow<Set<String>>(emptySet())
+
     private val _uploadProgress = MutableStateFlow<Map<java.util.UUID, Float>>(emptyMap())
     val uploadProgress: StateFlow<Map<java.util.UUID, Float>> = _uploadProgress.asStateFlow()
 
@@ -99,16 +101,33 @@ class FileExplorerViewModel(
     val folderCount: StateFlow<Int> = repository.getFolderCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    init {
+    fun initDownloadObserver(context: Context) {
         viewModelScope.launch {
             tdLibraryManager.fileUpdates.collect { tdFile ->
-                if (tdFile.local.downloadedSize > 0) {
+                if (tdFile.local.downloadedSize > 0 && tdFile.size > 0) {
                     val progress = tdFile.local.downloadedSize.toFloat() / tdFile.size
                     _downloadProgress.value = _downloadProgress.value + (tdFile.remote.id to progress)
                 }
                 if (tdFile.local.isDownloadingCompleted) {
-                    repository.getFileByTelegramFileId(tdFile.remote.id)?.let { entity ->
+                    _downloadProgress.value = _downloadProgress.value - tdFile.remote.id
+                    val entity = repository.getFileByTelegramFileId(tdFile.remote.id)
+                    if (entity != null) {
                         repository.updateFile(entity.copy(thumbnailPath = tdFile.local.path))
+
+                        if (_pendingDownloads.value.contains(tdFile.remote.id)) {
+                            _pendingDownloads.value = _pendingDownloads.value - tdFile.remote.id
+                            val success = com.example.teledrive.util.UriUtils.saveToDownloads(
+                                context,
+                                File(tdFile.local.path),
+                                entity.name,
+                                entity.mimeType
+                            )
+                            if (success) {
+                                _errorFlow.emit("Saved to Downloads: ${entity.name}")
+                            } else {
+                                _errorFlow.emit("Failed to save ${entity.name}")
+                            }
+                        }
                     }
                 }
             }
@@ -147,14 +166,22 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
+                val currentParentId = _currentFolderId.value
+                val parentFolder = currentParentId?.let { repository.getFolderById(it) }
+                val parentKey = parentFolder?.telegramThreadMsgId ?: 0L
+
                 try {
                     val topic = tdLibraryManager.execute<TdApi.ForumTopicInfo>(TdApi.CreateForumTopic(session.channelId, name, false, null))
-                    repository.createFolder(name, _currentFolderId.value, topic.forumTopicId.toLong())
+                    val threadId = topic.forumTopicId.toLong()
+                    val parentThreadId = if (parentKey != 0L) parentKey else null
+                    repository.createFolder(name, currentParentId, threadId, parentThreadId)
                 } catch (e: Exception) {
-                    val formattedText = TdApi.FormattedText("Folder: $name", null)
+                    val folderMarker = if (parentKey != 0L) "Folder:$name Parent:$parentKey" else "Folder: $name"
+                    val formattedText = TdApi.FormattedText(folderMarker, null)
                     val content = TdApi.InputMessageText(formattedText, null, false)
                     val message = tdLibraryManager.execute<TdApi.Message>(TdApi.SendMessage(session.channelId, null, null, null, null, content))
-                    repository.createFolder(name, _currentFolderId.value, message.id)
+                    val parentThreadId = if (parentKey != 0L) parentKey else null
+                    repository.createFolder(name, currentParentId, message.id, parentThreadId)
                 }
             } catch (e: Exception) {
                 _errorFlow.emit("Failed to create folder: ${e.message}")
@@ -222,13 +249,16 @@ class FileExplorerViewModel(
     fun downloadFile(fileEntity: FileEntity) {
         viewModelScope.launch {
             try {
+                _pendingDownloads.value = _pendingDownloads.value + fileEntity.telegramFileId
                 val file = if (fileEntity.telegramFileId.isNotEmpty()) {
                     tdLibraryManager.execute<TdApi.File>(TdApi.GetRemoteFile(fileEntity.telegramFileId, null))
                 } else {
                     tdLibraryManager.execute<TdApi.File>(TdApi.GetFile(fileEntity.telegramMsgId.toInt())) // Fallback
                 }
                 tdLibraryManager.send(TdApi.DownloadFile(file.id, 1, 0, 0, false))
+                _errorFlow.emit("Downloading ${fileEntity.name}...")
             } catch (e: Exception) {
+                _pendingDownloads.value = _pendingDownloads.value - fileEntity.telegramFileId
                 _errorFlow.emit("Download failed: ${e.message}")
             }
         }

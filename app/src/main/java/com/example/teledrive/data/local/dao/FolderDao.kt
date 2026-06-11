@@ -9,6 +9,9 @@ interface FolderDao {
     @Query("SELECT * FROM folders")
     fun getAllFolders(): Flow<List<Folder>>
 
+    @Query("SELECT * FROM folders")
+    suspend fun getAllFoldersSync(): List<Folder>
+
     @Query("SELECT * FROM folders WHERE id = :id")
     suspend fun getFolderById(id: Long): Folder?
 
@@ -29,6 +32,9 @@ interface FolderDao {
 
     @Query("UPDATE folders SET name = :newName WHERE id = :folderId")
     suspend fun renameFolder(folderId: Long, newName: String)
+
+    @Query("UPDATE folders SET parentFolderId = :parentId WHERE id = :id")
+    suspend fun updateParentId(id: Long, parentId: Long?)
 
     @Query("SELECT COUNT(*) FROM folders")
     fun getFolderCount(): Flow<Int>

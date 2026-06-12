@@ -17,17 +17,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,7 +48,6 @@ import java.util.*
 fun FileExplorerScreen(
     viewModel: FileExplorerViewModel,
     shouldCompress: Boolean,
-    onOpenSettings: () -> Unit,
     onFileClick: (FileEntity) -> Unit
 ) {
     val context = LocalContext.current
@@ -57,8 +61,6 @@ fun FileExplorerScreen(
     val isSyncing by viewModel.isSyncing.collectAsState()
     val isGridView by viewModel.isGridView.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
-    val uploadProgress by viewModel.uploadProgress.collectAsState()
-    val downloadProgress by viewModel.downloadProgress.collectAsState()
 
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var folderNameInput by remember { mutableStateOf("") }
@@ -68,7 +70,7 @@ fun FileExplorerScreen(
     var showDeleteDialog by remember { mutableStateOf<Any?>(null) }
     var showMoveDialog by remember { mutableStateOf<FileEntity?>(null) }
     var renameInput by remember { mutableStateOf("") }
-    var showFab by remember { mutableStateOf(false) }
+    var showFabMenu by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { selectedUri ->
@@ -76,224 +78,143 @@ fun FileExplorerScreen(
                 context.contentResolver.openFileDescriptor(selectedUri, "r")?.use { it.statSize } ?: 0L
             } catch (e: Exception) { 0L }
             if (fileSize > 2L * 1024 * 1024 * 1024) {
-                Toast.makeText(context, "File too large (max 2GB). Size: ${formatSize(fileSize)}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "File too large (max 2GB)", Toast.LENGTH_LONG).show()
                 return@let
             }
-            Toast.makeText(context, "Starting upload: ${formatSize(fileSize)}", Toast.LENGTH_SHORT).show()
             viewModel.uploadFile(context, selectedUri, shouldCompress)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.errorFlow.collect { msg ->
-            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.shareLink.collect { link ->
-            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Share Link", link))
-            Toast.makeText(context, "Link copied to clipboard!", Toast.LENGTH_SHORT).show()
         }
     }
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = {
-                        if (searchQuery.isEmpty()) {
-                            Text("Tele Drive", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        if (breadcrumb.isEmpty()) "Tele Drive" else breadcrumb.last().name,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.syncFromTelegram() }, enabled = !isSyncing) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Text("Search Results", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { viewModel.syncFromTelegram() }, enabled = !isSyncing) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Sync, contentDescription = "Sync")
-                            }
-                        }
-                        var showSortMenu by remember { mutableStateOf(false) }
-                        IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.Default.Sort, contentDescription = "Sort")
-                        }
-                        DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                            FileExplorerViewModel.SortOrder.values().forEach { order ->
-                                DropdownMenuItem(
-                                    text = { Text(order.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                                    onClick = { viewModel.setSortOrder(order); showSortMenu = false },
-                                    leadingIcon = { if (sortOrder == order) Icon(Icons.Default.Check, null, tint = TeleBluePrimary) }
-                                )
-                            }
-                        }
-                        IconButton(onClick = { viewModel.toggleViewMode() }) {
-                            Icon(
-                                if (isGridView) Icons.Default.ViewList else Icons.Default.GridView,
-                                contentDescription = "Toggle View"
-                            )
-                        }
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Default.AccountCircle, contentDescription = "Settings")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-
-                // Upload/Download progress bar
-                val allProgress = uploadProgress.values + downloadProgress.values
-                if (allProgress.isNotEmpty()) {
-                    val avg = allProgress.average().toFloat()
-                    LinearProgressIndicator(
-                        progress = { avg },
-                        modifier = Modifier.fillMaxWidth().height(3.dp),
-                        color = TeleBluePrimary,
-                        trackColor = TeleBlueContainer
-                    )
-                }
-
-                // Search bar
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.updateSearchQuery(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { Text("Search in Tele Drive") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear")
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(28.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = TeleBluePrimary,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                )
-            }
-        },
-        floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                AnimatedVisibility(visible = showFab, enter = fadeIn() + slideInVertically(), exit = fadeOut() + slideOutVertically()) {
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.inverseSurface, tonalElevation = 4.dp) {
-                                Text("New Folder", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.labelMedium)
-                            }
-                            SmallFloatingActionButton(
-                                onClick = { folderNameInput = ""; showCreateFolderDialog = true; showFab = false },
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer
-                            ) { Icon(Icons.Default.CreateNewFolder, contentDescription = null) }
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.inverseSurface, tonalElevation = 4.dp) {
-                                Text("Upload File", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.labelMedium)
-                            }
-                            SmallFloatingActionButton(
-                                onClick = { filePickerLauncher.launch("*/*"); showFab = false },
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            ) { Icon(Icons.Default.UploadFile, contentDescription = null) }
+                            Icon(Icons.Default.Sync, contentDescription = "Sync")
                         }
                     }
                 }
+            )
+        },
+        floatingActionButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                if (showFabMenu) {
+                    ExtendedFloatingActionButton(
+                        onClick = { folderNameInput = ""; showCreateFolderDialog = true; showFabMenu = false },
+                        icon = { Icon(Icons.Default.CreateNewFolder, null) },
+                        text = { Text("New Folder") },
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    ExtendedFloatingActionButton(
+                        onClick = { filePickerLauncher.launch("*/*"); showFabMenu = false },
+                        icon = { Icon(Icons.Default.UploadFile, null) },
+                        text = { Text("Upload File") },
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                }
                 FloatingActionButton(
-                    onClick = { showFab = !showFab },
-                    containerColor = TeleBluePrimary,
-                    contentColor = Color.White
+                    onClick = { showFabMenu = !showFabMenu },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
-                    Icon(if (showFab) Icons.Default.Close else Icons.Default.Add, contentDescription = "Add")
+                    Icon(if (showFabMenu) Icons.Default.Close else Icons.Default.Add, contentDescription = "Add")
                 }
             }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
 
-            // Breadcrumb row
-            if (breadcrumb.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    item {
-                        TextButton(onClick = { viewModel.navigateToFolder(null) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                            Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Home", style = MaterialTheme.typography.labelMedium)
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search your drive") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                Icon(Icons.Default.Close, null)
+                            }
                         }
-                    }
-                    items(breadcrumb) { folder ->
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = { viewModel.navigateToFolder(folder) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text(folder.name, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        }
-                    }
-                }
-                HorizontalDivider()
+                    },
+                    shape = RoundedCornerShape(28.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    singleLine = true
+                )
             }
 
-            // Storage summary bar (only at root)
-            if (breadcrumb.isEmpty() && searchQuery.isEmpty()) {
-                StorageSummaryCard(totalStorageUsed = totalStorageUsed, fileCount = fileCount, folderCount = folderCount)
-            }
+            Crossfade(targetState = (isSyncing && folders.isEmpty() && files.isEmpty())) { syncing ->
+                if (syncing) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    Crossfade(targetState = (folders.isEmpty() && files.isEmpty())) { empty ->
+                        if (empty) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                EmptyState(isSearch = searchQuery.isNotEmpty()) { filePickerLauncher.launch("*/*") }
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                columns = if (isGridView) GridCells.Fixed(2) else GridCells.Fixed(1),
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (breadcrumb.isEmpty() && searchQuery.isEmpty()) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        StorageSummaryCard(totalStorageUsed, fileCount, folderCount)
+                                    }
+                                }
 
-            // Content
-            if (isSyncing) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = TeleBluePrimary)
-                        Spacer(Modifier.height(16.dp))
-                        Text("Syncing with Telegram...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            } else if (folders.isEmpty() && files.isEmpty()) {
-                EmptyState(isSearch = searchQuery.isNotEmpty(), onUpload = { filePickerLauncher.launch("*/*") })
-            } else {
-                LazyVerticalGrid(
-                    columns = if (isGridView) GridCells.Fixed(2) else GridCells.Fixed(1),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 80.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Section header for folders
-                    if (folders.isNotEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(title = "Folders", count = folders.size)
-                        }
-                        items(folders, key = { it.id }) { folder ->
-                            FolderCard(
-                                folder = folder,
-                                isGrid = isGridView,
-                                onClick = { viewModel.navigateToFolder(folder) },
-                                onLongClick = { selectedFolder = folder }
-                            )
-                        }
-                    }
-                    // Section header for files
-                    if (files.isNotEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(title = "Files", count = files.size)
-                        }
-                        items(files, key = { it.id }) { file ->
-                            FileCard(
-                                file = file,
-                                isGrid = isGridView,
-                                onClick = { onFileClick(file) },
-                                onLongClick = { selectedFile = file }
-                            )
+                                if (breadcrumb.isNotEmpty() || searchQuery.isNotEmpty()) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        BreadcrumbChips(breadcrumb, searchQuery) { viewModel.navigateToFolder(it) }
+                                    }
+                                }
+
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    QuickActionStrip(
+                                        isGridView = isGridView,
+                                        onToggleView = { viewModel.toggleViewMode() },
+                                        sortOrder = sortOrder,
+                                        onSortClick = { viewModel.setSortOrder(it) }
+                                    )
+                                }
+
+                                if (folders.isNotEmpty()) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        Text("Folders", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+                                    }
+                                    items(folders, key = { "folder_${it.id}" }) { folder ->
+                                        FolderCard(folder, isGridView, onClick = { viewModel.navigateToFolder(folder) }, onLongClick = { selectedFolder = folder })
+                                    }
+                                }
+                                if (files.isNotEmpty()) {
+                                    item(span = { GridItemSpan(maxLineSpan) }) {
+                                        Text("Files", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+                                    }
+                                    items(files, key = { "file_${it.id}" }) { file ->
+                                        FileCard(file, isGridView, onClick = { onFileClick(file) }, onLongClick = { selectedFile = file })
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -301,21 +222,19 @@ fun FileExplorerScreen(
         }
     }
 
-    // Context menus
     if (selectedFolder != null) {
-        ItemContextMenu(
+        ItemActionSheet(
             title = selectedFolder!!.name,
             icon = Icons.Default.Folder,
             iconTint = ColorFolder,
             onDismiss = { selectedFolder = null },
             onRename = { renameInput = selectedFolder!!.name; showRenameDialog = true },
-            onDelete = { showDeleteDialog = selectedFolder; selectedFolder = null },
-            onMove = null
+            onDelete = { showDeleteDialog = selectedFolder; selectedFolder = null }
         )
     }
 
     if (selectedFile != null) {
-        ItemContextMenu(
+        ItemActionSheet(
             title = selectedFile!!.name,
             icon = getFileIcon(selectedFile!!.mimeType, selectedFile!!.extension),
             iconTint = getFileColor(selectedFile!!.mimeType, selectedFile!!.extension),
@@ -326,11 +245,9 @@ fun FileExplorerScreen(
         )
     }
 
-    // Dialogs
     if (showCreateFolderDialog) {
         AlertDialog(
             onDismissRequest = { showCreateFolderDialog = false },
-            icon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null, tint = TeleBluePrimary) },
             title = { Text("New Folder") },
             text = {
                 OutlinedTextField(
@@ -338,8 +255,7 @@ fun FileExplorerScreen(
                     onValueChange = { folderNameInput = it },
                     label = { Text("Folder name") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    singleLine = true
                 )
             },
             confirmButton = {
@@ -347,15 +263,13 @@ fun FileExplorerScreen(
                     Text("Create")
                 }
             },
-            dismissButton = { TextButton(onClick = { showCreateFolderDialog = false }) { Text("Cancel") } },
-            shape = RoundedCornerShape(20.dp)
+            dismissButton = { TextButton(onClick = { showCreateFolderDialog = false }) { Text("Cancel") } }
         )
     }
 
     if (showRenameDialog) {
         AlertDialog(
             onDismissRequest = { showRenameDialog = false; selectedFile = null; selectedFolder = null },
-            icon = { Icon(Icons.Default.Edit, contentDescription = null, tint = TeleBluePrimary) },
             title = { Text("Rename") },
             text = {
                 OutlinedTextField(
@@ -363,8 +277,7 @@ fun FileExplorerScreen(
                     onValueChange = { renameInput = it },
                     label = { Text("New name") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    singleLine = true
                 )
             },
             confirmButton = {
@@ -376,8 +289,7 @@ fun FileExplorerScreen(
                     }
                 }) { Text("Rename") }
             },
-            dismissButton = { TextButton(onClick = { showRenameDialog = false; selectedFile = null; selectedFolder = null }) { Text("Cancel") } },
-            shape = RoundedCornerShape(20.dp)
+            dismissButton = { TextButton(onClick = { showRenameDialog = false }) { Text("Cancel") } }
         )
     }
 
@@ -385,7 +297,6 @@ fun FileExplorerScreen(
         val name = when (val item = showDeleteDialog) { is FileEntity -> item.name; is Folder -> item.name; else -> "" }
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            icon = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete") },
             text = { Text("Delete \"$name\"? This cannot be undone.") },
             confirmButton = {
@@ -397,8 +308,7 @@ fun FileExplorerScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
             },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = null }) { Text("Cancel") } },
-            shape = RoundedCornerShape(20.dp)
+            dismissButton = { TextButton(onClick = { showDeleteDialog = null }) { Text("Cancel") } }
         )
     }
 
@@ -408,16 +318,15 @@ fun FileExplorerScreen(
             onDismissRequest = { showMoveDialog = null },
             title = { Text("Move to...") },
             text = {
-                Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                    FolderMoveItem(name = "Home (Root)", icon = Icons.Default.Home, onClick = { viewModel.moveFile(showMoveDialog!!, null); showMoveDialog = null })
+                Column(modifier = Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                    FolderMoveItem(name = "Home", icon = Icons.Default.Home, onClick = { viewModel.moveFile(showMoveDialog!!, null); showMoveDialog = null })
                     allFolders.filter { it.id != showMoveDialog?.folderId }.forEach { folder ->
                         FolderMoveItem(name = folder.name, icon = Icons.Default.Folder, onClick = { viewModel.moveFile(showMoveDialog!!, folder.id); showMoveDialog = null })
                     }
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { showMoveDialog = null }) { Text("Cancel") } },
-            shape = RoundedCornerShape(20.dp)
+            dismissButton = { TextButton(onClick = { showMoveDialog = null }) { Text("Cancel") } }
         )
     }
 }
@@ -427,42 +336,98 @@ fun StorageSummaryCard(totalStorageUsed: Long, fileCount: Int, folderCount: Int)
     val storageLimit = 50L * 1024 * 1024 * 1024
     val progress = (totalStorageUsed.toFloat() / storageLimit).coerceIn(0f, 1f)
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = TeleBlueContainer)
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Cloud, contentDescription = null, tint = TeleBluePrimary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Storage", style = MaterialTheme.typography.titleSmall, color = TeleBlueDark, fontWeight = FontWeight.SemiBold)
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Cloud, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
                 }
-                Text("$folderCount folders • $fileCount files", style = MaterialTheme.typography.labelSmall, color = TeleBlueDark.copy(alpha = 0.7f))
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("Cloud Storage", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("$folderCount folders • $fileCount files", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(0.7f))
+                }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
             LinearProgressIndicator(
                 progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                color = TeleBluePrimary,
-                trackColor = Color.White.copy(alpha = 0.5f)
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)
             )
-            Spacer(Modifier.height(4.dp))
-            Text("${formatSize(totalStorageUsed)} used of 50 GB", style = MaterialTheme.typography.bodySmall, color = TeleBlueDark)
+            Spacer(Modifier.height(8.dp))
+            Text("${formatSize(totalStorageUsed)} of 50 GB used", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BreadcrumbChips(breadcrumb: List<Folder>, query: String, onNavigate: (Folder?) -> Unit) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (query.isNotEmpty()) {
+            item {
+                InputChip(
+                    selected = true,
+                    onClick = { },
+                    label = { Text("Search: $query") },
+                    leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) }
+                )
+            }
+        } else {
+            item {
+                InputChip(
+                    selected = breadcrumb.isEmpty(),
+                    onClick = { onNavigate(null) },
+                    label = { Text("Home") },
+                    leadingIcon = { Icon(Icons.Default.Home, null, modifier = Modifier.size(18.dp)) }
+                )
+            }
+            items(breadcrumb) { folder ->
+                Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
+                InputChip(
+                    selected = folder == breadcrumb.last(),
+                    onClick = { onNavigate(folder) },
+                    label = { Text(folder.name) }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun SectionHeader(title: String, count: Int) {
+fun QuickActionStrip(isGridView: Boolean, onToggleView: () -> Unit, sortOrder: FileExplorerViewModel.SortOrder, onSortClick: (FileExplorerViewModel.SortOrder) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-        Text("$count", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 2.dp))
+        Text("All Items", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            var showSortMenu by remember { mutableStateOf(false) }
+            IconButton(onClick = { showSortMenu = true }) {
+                Icon(Icons.AutoMirrored.Filled.Sort, null, modifier = Modifier.size(20.dp))
+            }
+            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                FileExplorerViewModel.SortOrder.entries.forEach { order ->
+                    DropdownMenuItem(
+                        text = { Text(order.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                        onClick = { onSortClick(order); showSortMenu = false },
+                        leadingIcon = { if (sortOrder == order) Icon(Icons.Default.Check, null) }
+                    )
+                }
+            }
+            IconButton(onClick = onToggleView) {
+                Icon(if (isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView, null, modifier = Modifier.size(20.dp))
+            }
+        }
     }
 }
 
@@ -471,30 +436,25 @@ fun SectionHeader(title: String, count: Int) {
 fun FolderCard(folder: Folder, isGrid: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         if (isGrid) {
-            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(ColorFolder.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(32.dp), tint = ColorFolder)
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Text(formatDate(folder.createdDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(modifier = Modifier.padding(16.dp)) {
+                Icon(Icons.Default.Folder, null, tint = ColorFolder, modifier = Modifier.size(40.dp))
+                Spacer(Modifier.height(12.dp))
+                Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${formatDate(folder.createdDate)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(ColorFolder.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(26.dp), tint = ColorFolder)
-                }
+            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Folder, null, tint = ColorFolder, modifier = Modifier.size(32.dp))
                 Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Column(Modifier.weight(1f)) {
                     Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(formatDate(folder.createdDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.outline)
             }
         }
     }
@@ -507,70 +467,82 @@ fun FileCard(file: FileEntity, isGrid: Boolean, onClick: () -> Unit, onLongClick
     val fileIcon = getFileIcon(file.mimeType, file.extension)
     Card(
         modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         if (isGrid) {
-            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(fileColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(fileIcon, contentDescription = null, modifier = Modifier.size(32.dp), tint = fileColor)
+            Column(modifier = Modifier.padding(16.dp)) {
+                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(fileColor.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                    Icon(fileIcon, null, tint = fileColor, modifier = Modifier.size(24.dp))
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(formatSize(file.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(fileColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(fileIcon, contentDescription = null, modifier = Modifier.size(26.dp), tint = fileColor)
+            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(fileColor.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                    Icon(fileIcon, null, tint = fileColor, modifier = Modifier.size(24.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Column(Modifier.weight(1f)) {
                     Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(formatSize(file.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(formatDate(file.uploadDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Icon(Icons.Default.MoreVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.outline)
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun ItemContextMenu(title: String, icon: ImageVector, iconTint: Color, onDismiss: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit, onMove: (() -> Unit)?) {
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+fun ItemActionSheet(title: String, icon: ImageVector, iconTint: Color, onDismiss: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit, onMove: (() -> Unit)? = null) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(bottom = 32.dp)) {
-            Row(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(iconTint.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(26.dp))
-                }
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(32.dp))
                 Spacer(Modifier.width(12.dp))
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            HorizontalDivider()
-            Spacer(Modifier.height(8.dp))
-            ContextMenuItem(icon = Icons.Default.Edit, label = "Rename", onClick = { onRename(); onDismiss() })
+            HorizontalDivider(modifier = Modifier.alpha(0.5f))
+            ListItem(
+                headlineContent = { Text("Rename") },
+                leadingContent = { Icon(Icons.Default.Edit, null) },
+                modifier = Modifier.combinedClickable { onRename(); onDismiss() }
+            )
             if (onMove != null) {
-                ContextMenuItem(icon = Icons.Default.DriveFileMove, label = "Move", onClick = { onMove(); onDismiss() })
+                ListItem(
+                    headlineContent = { Text("Move") },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, null) },
+                    modifier = Modifier.combinedClickable { onMove(); onDismiss() }
+                )
             }
-            ContextMenuItem(icon = Icons.Default.Delete, label = "Delete", tint = MaterialTheme.colorScheme.error, onClick = { onDelete(); onDismiss() })
+            ListItem(
+                headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                modifier = Modifier.combinedClickable { onDelete(); onDismiss() }
+            )
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ContextMenuItem(icon: ImageVector, label: String, tint: Color = LocalContentColor.current, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(label, color = tint) },
-        leadingContent = { Icon(icon, contentDescription = null, tint = tint) },
-        modifier = Modifier.combinedClickable(onClick = onClick)
-    )
+fun EmptyState(isSearch: Boolean, onUpload: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Icon(if (isSearch) Icons.Default.SearchOff else Icons.Default.CloudQueue, null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+        Spacer(Modifier.height(16.dp))
+        Text(if (isSearch) "No results found" else "Your drive is empty", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(if (isSearch) "Try a different search term" else "Upload files to see them here", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!isSearch) {
+            Spacer(Modifier.height(24.dp))
+            Button(onClick = onUpload) { Text("Upload Now") }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -578,33 +550,12 @@ fun ContextMenuItem(icon: ImageVector, label: String, tint: Color = LocalContent
 fun FolderMoveItem(name: String, icon: ImageVector, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(name) },
-        leadingContent = { Icon(icon, contentDescription = null, tint = ColorFolder) },
-        modifier = Modifier.combinedClickable(onClick = onClick)
+        leadingContent = { Icon(icon, null, tint = ColorFolder) },
+        modifier = Modifier.combinedClickable { onClick() }
     )
 }
 
-@Composable
-fun EmptyState(isSearch: Boolean, onUpload: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Box(modifier = Modifier.size(100.dp).clip(CircleShape).background(TeleBlueContainer), contentAlignment = Alignment.Center) {
-            Icon(if (isSearch) Icons.Default.SearchOff else Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(52.dp), tint = TeleBluePrimary)
-        }
-        Spacer(Modifier.height(24.dp))
-        Text(if (isSearch) "No results found" else "Nothing here yet", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text(if (isSearch) "Try different keywords" else "Upload your first file to get started", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        if (!isSearch) {
-            Spacer(Modifier.height(28.dp))
-            Button(onClick = onUpload, shape = RoundedCornerShape(12.dp)) {
-                Icon(Icons.Default.CloudUpload, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Upload File")
-            }
-        }
-    }
-}
-
-// Helpers
+// Helpers moved back to screen for simplicity and build fix
 fun getFileIcon(mimeType: String?, extension: String?): ImageVector = when {
     mimeType?.startsWith("image/") == true -> Icons.Default.Image
     mimeType?.startsWith("video/") == true -> Icons.Default.VideoLibrary

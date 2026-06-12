@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -51,14 +53,11 @@ fun FilePreviewScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(file?.name ?: "File Details", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                title = { Text(file?.name ?: "Details", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
-                    IconButton(onClick = { file?.let { viewModel.shareFile(it, null) } }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share")
-                    }
                     IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                     }
@@ -68,13 +67,13 @@ fun FilePreviewScreen(
     ) { padding ->
         val currentFile = file
         if (currentFile == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
             Column(modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
 
                 // Preview area
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(260.dp).background(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth().height(300.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (currentFile.mimeType?.startsWith("image/") == true && currentFile.thumbnailPath != null) {
@@ -94,71 +93,82 @@ fun FilePreviewScreen(
                             contentScale = ContentScale.Fit
                         )
                         if (scale > 1f) {
-                            TextButton(onClick = { scale = 1f; offset = Offset.Zero }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                                Text("Reset", color = Color.White)
+                            FilledTonalButton(onClick = { scale = 1f; offset = Offset.Zero }, modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)) {
+                                Text("Reset Zoom")
                             }
                         }
                     } else {
                         val fileColor = getFileColor(currentFile.mimeType, currentFile.extension)
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(modifier = Modifier.size(80.dp).clip(RoundedCornerShape(20.dp)).background(fileColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                                Icon(getFileIcon(currentFile.mimeType, currentFile.extension), contentDescription = null, modifier = Modifier.size(48.dp), tint = fileColor)
+                            Box(modifier = Modifier.size(100.dp).clip(RoundedCornerShape(24.dp)).background(fileColor.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                                Icon(getFileIcon(currentFile.mimeType, currentFile.extension), contentDescription = null, modifier = Modifier.size(56.dp), tint = fileColor)
                             }
-                            Spacer(Modifier.height(12.dp))
-                            val ext = currentFile.extension?.uppercase() ?: "FILE"
-                            Surface(shape = RoundedCornerShape(6.dp), color = fileColor.copy(alpha = 0.15f)) {
-                                Text(ext, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, color = fileColor, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(16.dp))
+                            Surface(shape = RoundedCornerShape(8.dp), color = fileColor.copy(alpha = 0.15f)) {
+                                Text(
+                                    currentFile.extension?.uppercase() ?: "FILE",
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = fileColor,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(currentFile.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(formatSize(currentFile.size), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        Text("•", color = MaterialTheme.colorScheme.outline)
+                        Text(formatDate(currentFile.uploadDate), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
 
-                // File info
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text(currentFile.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        val fileColor = getFileColor(currentFile.mimeType, currentFile.extension)
-                        Surface(shape = RoundedCornerShape(6.dp), color = fileColor.copy(alpha = 0.12f)) {
-                            Text(formatSize(currentFile.size), modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = fileColor)
+                    Spacer(Modifier.height(32.dp))
+
+                    // Primary Actions
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Button(
+                            onClick = { viewModel.downloadFile(context, currentFile) },
+                            modifier = Modifier.weight(1f).height(56.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Default.Download, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Download")
                         }
-                        Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatDate(currentFile.uploadDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FilledTonalButton(
+                            onClick = { viewModel.shareFile(currentFile, null) },
+                            modifier = Modifier.weight(1f).height(56.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Default.Share, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Share")
+                        }
                     }
+
+                    Spacer(Modifier.height(32.dp))
+
+                    // Details Section
+                    Text("File Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(16.dp))
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            DetailItem(label = "Type", value = currentFile.mimeType ?: "Unknown", icon = Icons.Default.Description)
+                            DetailItem(label = "Size", value = formatSize(currentFile.size), icon = Icons.Default.DataUsage)
+                            DetailItem(label = "Uploaded", value = formatDate(currentFile.uploadDate), icon = Icons.Default.Event)
+                            DetailItem(label = "Message ID", value = currentFile.telegramMsgId.toString(), icon = Icons.Default.Fingerprint)
+                        }
+                    }
+
+                    Spacer(Modifier.height(40.dp))
                 }
-
-                Spacer(Modifier.height(20.dp))
-
-                // Action buttons
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { viewModel.downloadFile(context, currentFile) }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp)) {
-                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Download")
-                    }
-                    OutlinedButton(onClick = { viewModel.shareFile(currentFile, null) }, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(12.dp)) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Share")
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                // Details card
-                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text("File Details", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = TeleBluePrimary)
-                        FileDetailRow(label = "Type", value = currentFile.mimeType ?: "Unknown")
-                        FileDetailRow(label = "Size", value = formatSize(currentFile.size))
-                        FileDetailRow(label = "Uploaded", value = formatDate(currentFile.uploadDate))
-                        FileDetailRow(label = "Message ID", value = currentFile.telegramMsgId.toString())
-                    }
-                }
-
-                Spacer(Modifier.height(32.dp))
             }
         }
     }
@@ -166,24 +176,28 @@ fun FilePreviewScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            icon = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete File") },
-            text = { Text("Are you sure you want to delete \"${file?.name}\"? This cannot be undone.") },
+            text = { Text("Are you sure you want to delete \"${file?.name}\"?") },
             confirmButton = {
                 Button(onClick = { file?.let { viewModel.deleteFile(it) }; showDeleteDialog = false; onBack() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
                     Text("Delete")
                 }
             },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } },
-            shape = RoundedCornerShape(20.dp)
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
     }
 }
 
 @Composable
-fun FileDetailRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.4f))
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, modifier = Modifier.weight(0.6f), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+fun DetailItem(label: String, value: String, icon: ImageVector) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(16.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.teledrive.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -35,13 +36,8 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+            LargeTopAppBar(
+                title = { Text("Settings", fontWeight = FontWeight.Bold) }
             )
         }
     ) { padding ->
@@ -51,98 +47,75 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Profile card
+            // Profile section
             Card(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = TeleBlueContainer)
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
             ) {
                 Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(TeleBluePrimary), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                    Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp))
                     }
                     Spacer(Modifier.width(16.dp))
                     Column {
-                        Text("Tele Drive User", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TeleBlueDark)
-                        Spacer(Modifier.height(2.dp))
-                        Text("Channel ID: ${channelId ?: "Not set"}", style = MaterialTheme.typography.bodySmall, color = TeleBlueDark.copy(alpha = 0.7f))
+                        Text("Tele Drive User", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Channel ID: ${channelId ?: "Not set"}", style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(4.dp))
-                        Surface(shape = RoundedCornerShape(8.dp), color = TeleBluePrimary.copy(alpha = 0.15f)) {
-                            Text("Connected", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = TeleBluePrimary, fontWeight = FontWeight.SemiBold)
-                        }
+                        SuggestionChip(onClick = {}, label = { Text("Connected") }, border = null, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), labelColor = MaterialTheme.colorScheme.primary))
                     }
                 }
             }
 
-            // Preferences section
-            SettingsSectionHeader("Preferences")
+            SettingsSectionHeader("Appearance")
             SettingsSwitchItem(
-                icon = Icons.Default.Compress,
-                iconTint = ColorDoc,
-                title = "Compress Images",
-                subtitle = "Resize to 1024px, 85% quality before upload",
-                checked = settings.shouldCompress,
-                onCheckedChange = { onSettingsChange(settings.copy(shouldCompress = it)) }
-            )
-            SettingsDivider()
-            SettingsSwitchItem(
-                icon = Icons.Default.DarkMode,
-                iconTint = Color(0xFF5856D6),
+                icon = Icons.Default.Palette,
                 title = "Dark Mode",
-                subtitle = "Switch to dark theme",
+                subtitle = "Use dark theme across the app",
                 checked = settings.isDarkMode,
                 onCheckedChange = { onSettingsChange(settings.copy(isDarkMode = it)) }
             )
-            SettingsDivider()
+
+            SettingsSectionHeader("Upload & Download")
             SettingsSwitchItem(
-                icon = Icons.Default.CloudSync,
-                iconTint = TeleSuccess,
-                title = "Auto Upload",
-                subtitle = "Coming soon",
-                checked = false,
-                onCheckedChange = {},
-                enabled = false
+                icon = Icons.Default.Compress,
+                title = "Compress Images",
+                subtitle = "Save storage by compressing images",
+                checked = settings.shouldCompress,
+                onCheckedChange = { onSettingsChange(settings.copy(shouldCompress = it)) }
             )
 
-            // About section
+            SettingsSectionHeader("Account")
+            ListItem(
+                headlineContent = { Text("Sign Out", color = MaterialTheme.colorScheme.error) },
+                supportingContent = { Text("Log out from your Telegram account") },
+                leadingContent = {
+                    Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, null, tint = MaterialTheme.colorScheme.error)
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 8.dp).clip(RoundedCornerShape(12.dp)).clickable { showLogoutDialog = true }
+            )
+
             SettingsSectionHeader("About")
-            SettingsInfoItem(icon = Icons.Default.Info, iconTint = TeleBlueLight, title = "App Version", value = "1.1.0")
-            SettingsDivider()
-            SettingsInfoItem(icon = Icons.Default.Storage, iconTint = ColorArchive, title = "Storage Limit", value = "50 GB (Telegram)")
-            SettingsDivider()
-            SettingsInfoItem(icon = Icons.Default.Security, iconTint = TeleSuccess, title = "Encryption", value = "End-to-end (Telegram)")
+            SettingsInfoItem(icon = Icons.Default.Info, title = "App Version", value = "1.2.0")
+            SettingsInfoItem(icon = Icons.Default.Storage, title = "Storage Provider", value = "Telegram Cloud")
 
-            Spacer(Modifier.height(24.dp))
-
-            // Logout button
-            Button(
-                onClick = { showLogoutDialog = true },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
-                Spacer(Modifier.width(10.dp))
-                Text("Sign Out", fontWeight = FontWeight.SemiBold)
-            }
-
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
         }
     }
 
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Sign Out?") },
-            text = { Text("You will need to log in again with your Telegram account.") },
+            title = { Text("Sign Out") },
+            text = { Text("Are you sure you want to sign out? You will need to log in again.") },
             confirmButton = {
                 Button(onClick = { showLogoutDialog = false; onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
                     Text("Sign Out")
                 }
             },
-            dismissButton = { TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") } },
-            shape = RoundedCornerShape(20.dp)
+            dismissButton = { TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") } }
         )
     }
 }
@@ -150,45 +123,39 @@ fun SettingsScreen(
 @Composable
 fun SettingsSectionHeader(title: String) {
     Text(
-        title,
-        style = MaterialTheme.typography.labelMedium,
-        color = TeleBluePrimary,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
     )
 }
 
 @Composable
-fun SettingsDivider() {
-    HorizontalDivider(modifier = Modifier.padding(start = 72.dp, end = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-}
-
-@Composable
-fun SettingsSwitchItem(icon: ImageVector, iconTint: Color, title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true) {
+fun SettingsSwitchItem(icon: ImageVector, title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     ListItem(
-        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
-        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) },
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
         leadingContent = {
-            Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(iconTint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = if (enabled) iconTint else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+            Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
         },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled,
-                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = TeleBluePrimary))
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     )
 }
 
 @Composable
-fun SettingsInfoItem(icon: ImageVector, iconTint: Color, title: String, value: String) {
+fun SettingsInfoItem(icon: ImageVector, title: String, value: String) {
     ListItem(
-        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
+        headlineContent = { Text(title) },
         leadingContent = {
-            Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(iconTint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+            Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
             }
         },
-        trailingContent = { Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        trailingContent = { Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     )
 }

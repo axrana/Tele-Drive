@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Tele Drive</string>
-    <string name="telegram_api_hash">YOURAPIHASHHERE</string>
-    <string name="telegram_api_id">YOURAPIIDHERE</string>
-</resources>

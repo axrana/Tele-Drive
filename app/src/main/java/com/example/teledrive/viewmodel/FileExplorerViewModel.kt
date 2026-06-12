@@ -104,6 +104,9 @@ class FileExplorerViewModel(
     val folderCount: StateFlow<Int> = repository.getFolderCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    val allTransfers = repository.getAllTransfers()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
         viewModelScope.launch {
             repository.getSettings().firstOrNull()?.sortOrder?.let { savedSort ->

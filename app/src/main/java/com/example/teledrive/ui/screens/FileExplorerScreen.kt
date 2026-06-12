@@ -5,8 +5,10 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -103,30 +105,39 @@ fun FileExplorerScreen(
             Column {
                 TopAppBar(
                     title = {
-                        if (searchQuery.isEmpty()) {
-                            Text("Tele Drive", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        } else {
-                            Text("Search Results", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        }
+                        Text(
+                            if (searchQuery.isEmpty()) "Tele Drive" else "Search",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.ExtraBold
+                        )
                     },
                     actions = {
                         IconButton(onClick = { viewModel.syncFromTelegram() }, enabled = !isSyncing) {
                             if (isSyncing) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = TeleBluePrimary)
                             } else {
-                                Icon(Icons.Default.Sync, contentDescription = "Sync")
+                                Icon(Icons.Default.Sync, contentDescription = "Sync", tint = TeleBluePrimary)
                             }
                         }
                         var showSortMenu by remember { mutableStateOf(false) }
                         IconButton(onClick = { showSortMenu = true }) {
                             Icon(Icons.Default.Sort, contentDescription = "Sort")
                         }
-                        DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
                             FileExplorerViewModel.SortOrder.values().forEach { order ->
                                 DropdownMenuItem(
                                     text = { Text(order.name.lowercase().replaceFirstChar { it.uppercase() }) },
                                     onClick = { viewModel.setSortOrder(order); showSortMenu = false },
-                                    leadingIcon = { if (sortOrder == order) Icon(Icons.Default.Check, null, tint = TeleBluePrimary) }
+                                    leadingIcon = {
+                                        if (sortOrder == order) {
+                                            Icon(Icons.Default.Check, null, tint = TeleBluePrimary)
+                                        } else {
+                                            Spacer(Modifier.size(24.dp))
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -141,7 +152,7 @@ fun FileExplorerScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.background
                     )
                 )
 
@@ -151,37 +162,25 @@ fun FileExplorerScreen(
                     val avg = allProgress.average().toFloat()
                     LinearProgressIndicator(
                         progress = { avg },
-                        modifier = Modifier.fillMaxWidth().height(3.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .padding(horizontal = 16.dp)
+                            .clip(CircleShape),
                         color = TeleBluePrimary,
-                        trackColor = TeleBlueContainer
+                        trackColor = TeleBlueContainer.copy(alpha = 0.3f)
                     )
+                    Spacer(Modifier.height(8.dp))
                 }
 
                 // Search bar
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.updateSearchQuery(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { Text("Search in Tele Drive") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear")
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(28.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = TeleBluePrimary,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    SearchField(
+                        query = searchQuery,
+                        onQueryChange = { viewModel.updateSearchQuery(it) },
+                        onClear = { viewModel.updateSearchQuery("") }
                     )
-                )
+                }
             }
         },
         floatingActionButton = {
@@ -223,25 +222,45 @@ fun FileExplorerScreen(
             // Breadcrumb row
             if (breadcrumb.isNotEmpty()) {
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item {
-                        TextButton(onClick = { viewModel.navigateToFolder(null) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                            Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Home", style = MaterialTheme.typography.labelMedium)
-                        }
+                        FilterChip(
+                            selected = false,
+                            onClick = { viewModel.navigateToFolder(null) },
+                            label = { Text("Home") },
+                            leadingIcon = { Icon(Icons.Default.Home, null, modifier = Modifier.size(18.dp)) },
+                            shape = CircleShape
+                        )
                     }
                     items(breadcrumb) { folder ->
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = { viewModel.navigateToFolder(folder) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text(folder.name, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        }
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                        FilterChip(
+                            selected = folder == breadcrumb.last(),
+                            onClick = { viewModel.navigateToFolder(folder) },
+                            label = { Text(folder.name) },
+                            shape = CircleShape,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = TeleBlueContainer,
+                                selectedLabelColor = TeleBlueDark
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = folder == breadcrumb.last(),
+                                borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            )
+                        )
                     }
                 }
-                HorizontalDivider()
             }
 
             // Storage summary bar (only at root)
@@ -423,32 +442,128 @@ fun FileExplorerScreen(
 }
 
 @Composable
+fun SearchField(query: String, onQueryChange: (String) -> Unit, onClear: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(12.dp))
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (query.isEmpty()) {
+                    Text(
+                        "Search in Tele Drive",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    singleLine = true,
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(TeleBluePrimary),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClear) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Clear",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun StorageSummaryCard(totalStorageUsed: Long, fileCount: Int, folderCount: Int) {
     val storageLimit = 50L * 1024 * 1024 * 1024
     val progress = (totalStorageUsed.toFloat() / storageLimit).coerceIn(0f, 1f)
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = TeleBlueContainer)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, TeleBluePrimary.copy(alpha = 0.1f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Cloud, contentDescription = null, tint = TeleBluePrimary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Storage", style = MaterialTheme.typography.titleSmall, color = TeleBlueDark, fontWeight = FontWeight.SemiBold)
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(TeleBluePrimary.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Cloud, contentDescription = null, tint = TeleBluePrimary, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Cloud Storage",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-                Text("$folderCount folders • $fileCount files", style = MaterialTheme.typography.labelSmall, color = TeleBlueDark.copy(alpha = 0.7f))
+                Surface(
+                    color = TeleBluePrimary,
+                    shape = CircleShape
+                ) {
+                    Text(
+                        "${(progress * 100).toInt()}%",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White
+                    )
+                }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
             LinearProgressIndicator(
                 progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(CircleShape),
                 color = TeleBluePrimary,
-                trackColor = Color.White.copy(alpha = 0.5f)
+                trackColor = TeleBluePrimary.copy(alpha = 0.1f)
             )
-            Spacer(Modifier.height(4.dp))
-            Text("${formatSize(totalStorageUsed)} used of 50 GB", style = MaterialTheme.typography.bodySmall, color = TeleBlueDark)
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "${formatSize(totalStorageUsed)} used of 50 GB",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    "$folderCount folders • $fileCount files",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }
@@ -456,13 +571,31 @@ fun StorageSummaryCard(totalStorageUsed: Long, fileCount: Int, folderCount: Int)
 @Composable
 fun SectionHeader(title: String, count: Int) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-        Text("$count", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 2.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 0.5.sp
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            Text(
+                "$count",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
@@ -470,31 +603,74 @@ fun SectionHeader(title: String, count: Int) {
 @Composable
 fun FolderCard(folder: Folder, isGrid: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
     ) {
         if (isGrid) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(ColorFolder.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(32.dp), tint = ColorFolder)
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(ColorFolder.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(36.dp), tint = ColorFolder)
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Text(formatDate(folder.createdDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    folder.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Text(
+                    formatDate(folder.createdDate),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
         } else {
-            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(ColorFolder.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(26.dp), tint = ColorFolder)
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(ColorFolder.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(28.dp), tint = ColorFolder)
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(folder.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(formatDate(folder.createdDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        folder.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        formatDate(folder.createdDate),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                )
             }
         }
     }
@@ -506,35 +682,82 @@ fun FileCard(file: FileEntity, isGrid: Boolean, onClick: () -> Unit, onLongClick
     val fileColor = getFileColor(file.mimeType, file.extension)
     val fileIcon = getFileIcon(file.mimeType, file.extension)
     Card(
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
     ) {
         if (isGrid) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(fileColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(fileIcon, contentDescription = null, modifier = Modifier.size(32.dp), tint = fileColor)
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(fileColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(fileIcon, contentDescription = null, modifier = Modifier.size(36.dp), tint = fileColor)
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Text(formatSize(file.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    file.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Text(
+                    formatSize(file.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
         } else {
-            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(fileColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(fileIcon, contentDescription = null, modifier = Modifier.size(26.dp), tint = fileColor)
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(fileColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(fileIcon, contentDescription = null, modifier = Modifier.size(28.dp), tint = fileColor)
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(formatSize(file.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatDate(file.uploadDate), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        file.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            formatSize(file.size),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Box(modifier = Modifier.size(3.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)))
+                        Text(
+                            formatDate(file.uploadDate),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
                     }
                 }
-                Icon(Icons.Default.MoreVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                )
             }
         }
     }
@@ -542,23 +765,59 @@ fun FileCard(file: FileEntity, isGrid: Boolean, onClick: () -> Unit, onLongClick
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ItemContextMenu(title: String, icon: ImageVector, iconTint: Color, onDismiss: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit, onMove: (() -> Unit)?) {
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
-        Column(modifier = Modifier.padding(bottom = 32.dp)) {
-            Row(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(iconTint.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(26.dp))
+fun ItemContextMenu(
+    title: String,
+    icon: ImageVector,
+    iconTint: Color,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onMove: (() -> Unit)?
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)) },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(modifier = Modifier.padding(bottom = 40.dp)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(iconTint.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(28.dp))
                 }
-                Spacer(Modifier.width(12.dp))
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
-            HorizontalDivider()
-            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+            )
             ContextMenuItem(icon = Icons.Default.Edit, label = "Rename", onClick = { onRename(); onDismiss() })
             if (onMove != null) {
-                ContextMenuItem(icon = Icons.Default.DriveFileMove, label = "Move", onClick = { onMove(); onDismiss() })
+                ContextMenuItem(icon = Icons.Default.DriveFileMove, label = "Move to Folder", onClick = { onMove(); onDismiss() })
             }
-            ContextMenuItem(icon = Icons.Default.Delete, label = "Delete", tint = MaterialTheme.colorScheme.error, onClick = { onDelete(); onDismiss() })
+            Spacer(Modifier.height(8.dp))
+            ContextMenuItem(
+                icon = Icons.Default.Delete,
+                label = "Delete",
+                tint = MaterialTheme.colorScheme.error,
+                onClick = { onDelete(); onDismiss() }
+            )
         }
     }
 }
@@ -585,20 +844,54 @@ fun FolderMoveItem(name: String, icon: ImageVector, onClick: () -> Unit) {
 
 @Composable
 fun EmptyState(isSearch: Boolean, onUpload: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Box(modifier = Modifier.size(100.dp).clip(CircleShape).background(TeleBlueContainer), contentAlignment = Alignment.Center) {
-            Icon(if (isSearch) Icons.Default.SearchOff else Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(52.dp), tint = TeleBluePrimary)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .clip(CircleShape)
+                .background(TeleBluePrimary.copy(alpha = 0.05f))
+                .border(2.dp, TeleBluePrimary.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (isSearch) Icons.Default.SearchOff else Icons.Default.CloudUpload,
+                contentDescription = null,
+                modifier = Modifier.size(60.dp),
+                tint = TeleBluePrimary
+            )
         }
-        Spacer(Modifier.height(24.dp))
-        Text(if (isSearch) "No results found" else "Nothing here yet", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text(if (isSearch) "Try different keywords" else "Upload your first file to get started", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(32.dp))
+        Text(
+            if (isSearch) "No results found" else "Your cloud is empty",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            if (isSearch) "We couldn't find what you're looking for" else "Upload your first file to start using Tele Drive",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
         if (!isSearch) {
-            Spacer(Modifier.height(28.dp))
-            Button(onClick = onUpload, shape = RoundedCornerShape(12.dp)) {
+            Spacer(Modifier.height(40.dp))
+            Button(
+                onClick = onUpload,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp)
+            ) {
                 Icon(Icons.Default.CloudUpload, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Upload File")
+                Spacer(Modifier.width(12.dp))
+                Text("Upload First File", style = MaterialTheme.typography.titleMedium)
             }
         }
     }

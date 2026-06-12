@@ -5,27 +5,14 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.padding
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.teledrive.ui.screens.FileExplorerScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.teledrive.data.local.entity.TransferStatus
 import com.example.teledrive.ui.screens.LoginScreen
 import com.example.teledrive.ui.screens.SettingsScreen
 import com.example.teledrive.ui.screens.FilePreviewScreen
-import com.example.teledrive.ui.screens.TransfersScreen
 import com.example.teledrive.ui.theme.TeleDriveTheme
 import com.example.teledrive.viewmodel.FileExplorerViewModel
 import com.example.teledrive.viewmodel.LoginViewModel
@@ -84,125 +71,59 @@ class MainActivity : ComponentActivity() {
             TeleDriveTheme(darkTheme = isDarkMode) {
                 val navController = rememberNavController()
                 val userSession by repository.getUserSession().collectAsState(initial = null)
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
 
-                // Single instance for shared state across File Explorer, Transfers, and Preview
-                val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
-
-                val showBottomBar = currentDestination?.route in listOf("explorer", "transfers", "settings")
-
-                Scaffold(
-                    bottomBar = {
-                        if (showBottomBar) {
-                            NavigationBar {
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Folder, contentDescription = null) },
-                                    label = { Text("Files") },
-                                    selected = currentDestination?.hierarchy?.any { it.route == "explorer" } == true,
-                                    onClick = {
-                                        navController.navigate("explorer") {
-                                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
-                                )
-                                NavigationBarItem(
-                                    icon = {
-                                        val transfers by explorerViewModel.allTransfers.collectAsState()
-                                        val activeCount = transfers.count { it.status == TransferStatus.IN_PROGRESS || it.status == TransferStatus.PENDING }
-                                        BadgedBox(badge = {
-                                            if (activeCount > 0) {
-                                                Badge { Text(activeCount.toString()) }
-                                            }
-                                        }) {
-                                            Icon(Icons.Default.CloudSync, contentDescription = null)
-                                        }
-                                    },
-                                    label = { Text("Transfers") },
-                                    selected = currentDestination?.hierarchy?.any { it.route == "transfers" } == true,
-                                    onClick = {
-                                        navController.navigate("transfers") {
-                                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
-                                )
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                                    label = { Text("Settings") },
-                                    selected = currentDestination?.hierarchy?.any { it.route == "settings" } == true,
-                                    onClick = {
-                                        navController.navigate("settings") {
-                                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
-                                )
-                            }
-                        }
+                NavHost(navController = navController, startDestination = if (userSession != null) "explorer" else "login") {
+                    composable("login") {
+                        val loginViewModel: LoginViewModel = viewModel(factory = viewModelFactory)
+                        LoginEffect(loginViewModel, tdLibraryManager)
+                        LoginScreen(loginViewModel)
                     }
-                ) { innerPadding ->
-                    NavHost(
-                        navController = navController,
-                        startDestination = if (userSession != null) "explorer" else "login",
-                        modifier = Modifier.padding(innerPadding)
-                    ) {
-                        composable("login") {
-                            val loginViewModel: LoginViewModel = viewModel(factory = viewModelFactory)
-                            LoginEffect(loginViewModel, tdLibraryManager)
-                            LoginScreen(loginViewModel)
-                        }
-                        composable("explorer") {
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            LaunchedEffect(Unit) { explorerViewModel.initDownloadObserver(context) }
-                            ExplorerEffect(explorerViewModel, tdLibraryManager)
-                            FileExplorerScreen(
-                                viewModel = explorerViewModel,
-                                shouldCompress = persistentSettings?.shouldCompress ?: false,
-                                onFileClick = { file ->
-                                    navController.navigate("preview/${file.id}")
+                    composable("explorer") {
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
+                        LaunchedEffect(Unit) { explorerViewModel.initDownloadObserver(context) }
+                        ExplorerEffect(explorerViewModel, tdLibraryManager)
+                        FileExplorerScreen(
+                            viewModel = explorerViewModel,
+                            shouldCompress = persistentSettings?.shouldCompress ?: false,
+                            onOpenSettings = { navController.navigate("settings") },
+                            onFileClick = { file ->
+                                navController.navigate("preview/${file.id}")
+                            }
+                        )
+                    }
+                    composable("preview/{fileId}") { backStackEntry ->
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val fileId = backStackEntry.arguments?.getString("fileId")?.toLongOrNull() ?: 0L
+                        val explorerViewModel: FileExplorerViewModel = viewModel(factory = viewModelFactory)
+                        LaunchedEffect(Unit) { explorerViewModel.initDownloadObserver(context) }
+                        FilePreviewScreen(
+                            fileId = fileId,
+                            viewModel = explorerViewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable("settings") {
+                        val scope = rememberCoroutineScope()
+                        SettingsScreen(
+                            settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
+                            channelId = userSession?.channelId,
+                            onSettingsChange = { newSettings ->
+                                scope.launch {
+                                    repository.saveSettings(newSettings)
                                 }
-                            )
-                        }
-                        composable("transfers") {
-                            TransfersScreen(explorerViewModel)
-                        }
-                        composable("preview/{fileId}") { backStackEntry ->
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            val fileId = backStackEntry.arguments?.getString("fileId")?.toLongOrNull() ?: 0L
-                            LaunchedEffect(Unit) { explorerViewModel.initDownloadObserver(context) }
-                            FilePreviewScreen(
-                                fileId = fileId,
-                                viewModel = explorerViewModel,
-                                onBack = { navController.popBackStack() }
-                            )
-                        }
-                        composable("settings") {
-                            val scope = rememberCoroutineScope()
-                            SettingsScreen(
-                                settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
-                                channelId = userSession?.channelId,
-                                onSettingsChange = { newSettings ->
-                                    scope.launch {
-                                        repository.saveSettings(newSettings)
+                            },
+                            onLogout = {
+                                scope.launch {
+                                    tdLibraryManager.logOut()
+                                    repository.clearSession()
+                                    navController.navigate("login") {
+                                        popUpTo("explorer") { inclusive = true }
                                     }
-                                },
-                                onLogout = {
-                                    scope.launch {
-                                        tdLibraryManager.logOut()
-                                        repository.clearSession()
-                                        navController.navigate("login") {
-                                            popUpTo("explorer") { inclusive = true }
-                                        }
-                                    }
-                                },
-                                onBack = { navController.popBackStack() }
-                            )
-                        }
+                                }
+                            },
+                            onBack = { navController.popBackStack() }
+                        )
                     }
                 }
             }

@@ -48,6 +48,7 @@ import java.util.*
 fun FileExplorerScreen(
     viewModel: FileExplorerViewModel,
     shouldCompress: Boolean,
+    onOpenSettings: () -> Unit,
     onFileClick: (FileEntity) -> Unit
 ) {
     val context = LocalContext.current
@@ -101,6 +102,9 @@ fun FileExplorerScreen(
                         } else {
                             Icon(Icons.Default.Sync, contentDescription = "Sync")
                         }
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = "Settings")
                     }
                 }
             )

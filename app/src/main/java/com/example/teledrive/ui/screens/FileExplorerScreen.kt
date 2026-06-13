@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -143,7 +144,7 @@ fun FileExplorerScreen(
                         }
                         IconButton(onClick = { viewModel.toggleViewMode() }) {
                             Icon(
-                                if (isGridView) Icons.Default.List else Icons.Default.GridView,
+                                if (isGridView) Icons.AutoMirrored.Filled.List else Icons.Default.ViewModule,
                                 contentDescription = "Toggle View"
                             )
                         }
@@ -280,19 +281,21 @@ fun FileExplorerScreen(
             } else if (folders.isEmpty() && files.isEmpty()) {
                 EmptyState(isSearch = searchQuery.isNotEmpty(), onUpload = { filePickerLauncher.launch("*/*") })
             } else {
+                val safeFolders = folders.distinctBy { it.id }
+                val safeFiles = files.distinctBy { it.id }
                 LazyVerticalGrid(
                     columns = if (isGridView) GridCells.Fixed(2) else GridCells.Fixed(1),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 80.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 80.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Section header for folders
-                    if (folders.isNotEmpty()) {
+                    if (safeFolders.isNotEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(title = "Folders", count = folders.size)
+                            SectionHeader(title = "Folders", count = safeFolders.size)
                         }
-                        items(folders, key = { it.id }) { folder ->
+                        items(safeFolders, key = { "folder_${it.id}" }) { folder ->
                             FolderCard(
                                 folder = folder,
                                 isGrid = isGridView,
@@ -302,11 +305,11 @@ fun FileExplorerScreen(
                         }
                     }
                     // Section header for files
-                    if (files.isNotEmpty()) {
+                    if (safeFiles.isNotEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(title = "Files", count = files.size)
+                            SectionHeader(title = "Files", count = safeFiles.size)
                         }
-                        items(files, key = { it.id }) { file ->
+                        items(safeFiles, key = { "file_${it.id}" }) { file ->
                             FileCard(
                                 file = file,
                                 isGrid = isGridView,

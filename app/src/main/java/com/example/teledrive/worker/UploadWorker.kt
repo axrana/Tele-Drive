@@ -93,18 +93,22 @@ class UploadWorker(
             progressJob.cancel()
 
             val docContent = message.content as TdApi.MessageDocument
-            repository.createFile(
-                FileEntity(
-                    name = file.name,
-                    size = file.length(),
-                    mimeType = docContent.document.mimeType,
-                    extension = file.extension,
-                    telegramMsgId = message.id,
-                    telegramFileId = docContent.document.document.remote.id,
-                    folderId = if (folderId == -1L) null else folderId,
-                    uploadDate = System.currentTimeMillis()
+            val remoteId = docContent.document.document.remote.id
+            val existing = repository.getFileByTelegramFileId(remoteId)
+            if (existing == null) {
+                repository.createFile(
+                    FileEntity(
+                        name = file.name,
+                        size = file.length(),
+                        mimeType = docContent.document.mimeType,
+                        extension = file.extension,
+                        telegramMsgId = message.id,
+                        telegramFileId = remoteId,
+                        folderId = if (folderId == -1L) null else folderId,
+                        uploadDate = System.currentTimeMillis()
+                    )
                 )
-            )
+            }
             Result.success()
         } catch (e: Exception) {
             tdLibraryManager.errorFlow.emit("Upload failed for ${file.name}: ${e.message}")

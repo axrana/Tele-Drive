@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
     tableName = "files",
     indices = [
         Index(value = ["telegramMsgId"], unique = true),
+        Index(value = ["telegramFileId"], unique = true),
         Index(value = ["folderId"])
     ],
     foreignKeys = [

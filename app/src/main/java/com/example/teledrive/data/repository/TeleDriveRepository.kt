@@ -204,7 +204,13 @@ class TeleDriveRepository(
                         localFolderId = recoveredFolderId
                     }
 
-                    val existingFile = fileDao.getFileByTelegramMsgId(msg.id)
+                    val remoteId = doc.document?.remote?.id ?: ""
+                    val existingFile = if (remoteId.isNotEmpty()) {
+                        fileDao.getFileByTelegramFileId(remoteId)
+                    } else {
+                        fileDao.getFileByTelegramMsgId(msg.id)
+                    }
+
                     if (existingFile == null) {
                         fileDao.createFile(
                             FileEntity(
@@ -213,13 +219,18 @@ class TeleDriveRepository(
                                 mimeType = doc.mimeType,
                                 extension = (doc.fileName ?: "").substringAfterLast('.', ""),
                                 telegramMsgId = msg.id,
-                                telegramFileId = doc.document?.remote?.id ?: "",
+                                telegramFileId = remoteId,
                                 folderId = localFolderId,
                                 uploadDate = msg.date.toLong() * 1000
                             )
                         )
-                    } else if (existingFile.folderId != localFolderId) {
-                        fileDao.updateFile(existingFile.copy(folderId = localFolderId))
+                    } else {
+                        if (existingFile.folderId != localFolderId || existingFile.telegramMsgId != msg.id) {
+                            fileDao.updateFile(existingFile.copy(
+                                folderId = localFolderId,
+                                telegramMsgId = msg.id
+                            ))
+                        }
                     }
                 } catch (e: Exception) {
                     com.example.teledrive.util.TeleDriveLogger.e("Sync", "File parse error msgId=${msg.id}", e)

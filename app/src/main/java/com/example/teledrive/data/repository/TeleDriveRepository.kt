@@ -388,7 +388,7 @@ class TeleDriveRepository(
 
         // 5. Cleanup
         // Handle Recovered bucket for orphaned storage messages not in journal
-        val storageInJournal = allEvents.filter { it.objectType == "file" && it.op == "CREATE_FILE" }
+        val storageInJournal = allEvents.filter { it.objectType == "file" && (it.op == "CREATE_FILE" || it.op == "COPY_FILE") }
             .map { org.json.JSONObject(it.payloadJson).getLong("storageMessageId") }
             .toSet()
 
@@ -478,7 +478,7 @@ class TeleDriveRepository(
             if (msg.content is TdApi.MessageText) {
                 val text = (msg.content as TdApi.MessageText).text.text
                 MetadataHelper.parseFolderMetadata(text)?.let { meta ->
-                    val newUuid = java.util.UUID.randomUUID().toString()
+                    val newUuid = java.util.UUID.nameUUIDFromBytes("folder_${msg.id}".toByteArray()).toString()
                     oldThreadToNewUuid[msg.id] = newUuid
                     appendJournalEvent(
                         tdLibraryManager, session.journalChannelId,
@@ -524,7 +524,7 @@ class TeleDriveRepository(
                 appendJournalEvent(
                     tdLibraryManager, session.journalChannelId,
                     op = "CREATE_FILE", objectType = "file",
-                    objectId = java.util.UUID.randomUUID().toString(),
+                    objectId = java.util.UUID.nameUUIDFromBytes("file_${msg.id}".toByteArray()).toString(),
                     version = 1,
                     payload = mapOf(
                         "name" to (doc.fileName ?: "imported"),

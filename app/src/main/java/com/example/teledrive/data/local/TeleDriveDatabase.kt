@@ -103,6 +103,9 @@ abstract class TeleDriveDatabase : RoomDatabase() {
                 // Settings update for sync tracking
                 db.execSQL("ALTER TABLE settings ADD COLUMN journalLastSyncMessageId INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE settings ADD COLUMN storageLastSyncMessageId INTEGER NOT NULL DEFAULT 0")
+
+                // Unique index for JournalEvent
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_journal_events_eventUuid ON journal_events (eventUuid)")
             }
         }
     }

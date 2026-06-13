@@ -162,13 +162,19 @@ class FileExplorerViewModel(
             _breadcrumb.value = emptyList()
         } else {
             viewModelScope.launch {
-                val list = mutableListOf<Folder>()
-                var current: Folder? = folder
-                while (current != null) {
-                    list.add(0, current)
-                    current = current.parentFolderId?.let { repository.getFolderById(it) }
+                try {
+                    val list = mutableListOf<Folder>()
+                    val visitedIds = mutableSetOf<Long>()
+                    var current: Folder? = folder
+                    while (current != null && !visitedIds.contains(current.id)) {
+                        list.add(0, current)
+                        visitedIds.add(current.id)
+                        current = current.parentFolderId?.let { repository.getFolderById(it) }
+                    }
+                    _breadcrumb.value = list
+                } catch (e: Exception) {
+                    com.example.teledrive.util.TeleDriveLogger.e("Navigate", "Hierarchy error", e)
                 }
-                _breadcrumb.value = list
             }
         }
     }
@@ -177,15 +183,18 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
+                if (session.channelId == 0L) {
+                    _errorFlow.emit("Storage channel not set. Check settings.")
+                    return@launch
+                }
+
                 val currentParentId = _currentFolderId.value
                 val parentFolder = currentParentId?.let { repository.getFolderById(it) }
                 val parentKey = parentFolder?.telegramThreadMsgId
 
-                val folderMarker = if (parentKey != null && parentKey != 0L) {
-                    "Folder:$name Parent:$parentKey"
-                } else {
-                    "Folder: $name"
-                }
+                // Use MetadataHelper for consistent markers
+                val folderMarker = com.example.teledrive.telegram.MetadataHelper.formatFolderMetadata(name, parentKey)
+
                 val formattedText = TdApi.FormattedText()
                 formattedText.text = folderMarker
 
@@ -198,10 +207,13 @@ class FileExplorerViewModel(
                 query.inputMessageContent = content
 
                 val message = tdLibraryManager.execute(query)
-                val parentThreadId = if (parentKey != null && parentKey != 0L) parentKey else null
-                repository.createFolder(name, currentParentId, message.id, parentThreadId)
+                    ?: throw Exception("Telegram did not return a message")
+
+                repository.createFolder(name, currentParentId, message.id, parentKey)
+                _errorFlow.emit("Folder '$name' created")
             } catch (e: Exception) {
-                _errorFlow.emit("Failed to create folder: ${e.message}")
+                com.example.teledrive.util.TeleDriveLogger.e("CreateFolder", "Failed", e)
+                _errorFlow.emit("Failed to create folder: ${e.localizedMessage}")
             }
         }
     }

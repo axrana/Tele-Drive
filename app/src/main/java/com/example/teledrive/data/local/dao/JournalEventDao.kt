@@ -12,7 +12,7 @@ interface JournalEventDao {
     @Query("SELECT * FROM journal_events ORDER BY ts ASC, version ASC")
     suspend fun getAllEventsSync(): List<JournalEvent>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertEvent(event: JournalEvent)
 
     @Query("DELETE FROM journal_events")

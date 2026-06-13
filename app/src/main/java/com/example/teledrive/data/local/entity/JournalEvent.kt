@@ -3,7 +3,10 @@ package com.example.teledrive.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "journal_events")
+@Entity(
+    tableName = "journal_events",
+    indices = [androidx.room.Index(value = ["eventUuid"], unique = true)]
+)
 data class JournalEvent(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val eventUuid: String,

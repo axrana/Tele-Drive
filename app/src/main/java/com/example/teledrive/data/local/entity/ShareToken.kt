@@ -2,10 +2,12 @@ package com.example.teledrive.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "share_tokens",
+    indices = [Index(value = ["fileId"])],
     foreignKeys = [
         ForeignKey(
             entity = FileEntity::class,

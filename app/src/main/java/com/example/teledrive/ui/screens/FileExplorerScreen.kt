@@ -52,6 +52,7 @@ fun FileExplorerScreen(
     val context = LocalContext.current
     val folders by viewModel.folders.collectAsState()
     val files by viewModel.files.collectAsState()
+    val currentFolderId by viewModel.currentFolderId.collectAsState()
     val breadcrumb by viewModel.breadcrumb.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val totalStorageUsed by viewModel.totalStorageUsed.collectAsState()
@@ -69,7 +70,7 @@ fun FileExplorerScreen(
     var selectedFolder by remember { mutableStateOf<Folder?>(null) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<Any?>(null) }
-    var showMoveDialog by remember { mutableStateOf<FileEntity?>(null) }
+    var showMoveDialog by remember { mutableStateOf<Any?>(null) }
     var renameInput by remember { mutableStateOf("") }
     var showFab by remember { mutableStateOf(false) }
 
@@ -332,7 +333,8 @@ fun FileExplorerScreen(
             onDismiss = { selectedFolder = null },
             onRename = { renameInput = selectedFolder!!.name; showRenameDialog = true },
             onDelete = { showDeleteDialog = selectedFolder; selectedFolder = null },
-            onMove = null
+            onMove = { showMoveDialog = selectedFolder; selectedFolder = null },
+            onCopy = null
         )
     }
 
@@ -344,7 +346,8 @@ fun FileExplorerScreen(
             onDismiss = { selectedFile = null },
             onRename = { renameInput = selectedFile!!.name; showRenameDialog = true },
             onDelete = { showDeleteDialog = selectedFile; selectedFile = null },
-            onMove = { showMoveDialog = selectedFile; selectedFile = null }
+            onMove = { showMoveDialog = selectedFile; selectedFile = null },
+            onCopy = { viewModel.copyFile(selectedFile!!, currentFolderId); selectedFile = null }
         )
     }
 
@@ -431,9 +434,27 @@ fun FileExplorerScreen(
             title = { Text("Move to...") },
             text = {
                 Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                    FolderMoveItem(name = "Home (Root)", icon = Icons.Default.Home, onClick = { viewModel.moveFile(showMoveDialog!!, null); showMoveDialog = null })
-                    allFolders.filter { it.id != showMoveDialog?.folderId }.forEach { folder ->
-                        FolderMoveItem(name = folder.name, icon = Icons.Default.Folder, onClick = { viewModel.moveFile(showMoveDialog!!, folder.id); showMoveDialog = null })
+                    FolderMoveItem(name = "Home (Root)", icon = Icons.Default.Home, onClick = {
+                        when (val item = showMoveDialog) {
+                            is FileEntity -> viewModel.moveFile(item, null)
+                            is Folder -> viewModel.moveFolder(item, null)
+                        }
+                        showMoveDialog = null
+                    })
+                    allFolders.filter { folder ->
+                        when (val item = showMoveDialog) {
+                            is FileEntity -> folder.id != item.folderId
+                            is Folder -> folder.id != item.id && folder.id != item.parentFolderId
+                            else -> true
+                        }
+                    }.forEach { folder ->
+                        FolderMoveItem(name = folder.name, icon = Icons.Default.Folder, onClick = {
+                            when (val item = showMoveDialog) {
+                                is FileEntity -> viewModel.moveFile(item, folder.id)
+                                is Folder -> viewModel.moveFolder(item, folder.id)
+                            }
+                            showMoveDialog = null
+                        })
                     }
                 }
             },
@@ -775,7 +796,8 @@ fun ItemContextMenu(
     onDismiss: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
-    onMove: (() -> Unit)?
+    onMove: (() -> Unit)?,
+    onCopy: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -813,6 +835,9 @@ fun ItemContextMenu(
             ContextMenuItem(icon = Icons.Default.Edit, label = "Rename", onClick = { onRename(); onDismiss() })
             if (onMove != null) {
                 ContextMenuItem(icon = Icons.Default.FolderOpen, label = "Move to Folder", onClick = { onMove(); onDismiss() })
+            }
+            if (onCopy != null) {
+                ContextMenuItem(icon = Icons.Default.ContentCopy, label = "Make a Copy", onClick = { onCopy(); onDismiss() })
             }
             Spacer(Modifier.height(8.dp))
             ContextMenuItem(

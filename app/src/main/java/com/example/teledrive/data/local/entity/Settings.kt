@@ -9,5 +9,7 @@ data class Settings(
     val isDarkMode: Boolean = false,
     val shouldCompress: Boolean = false,
     val autoUpload: Boolean = false,
-    val sortOrder: String = "DATE"
+    val sortOrder: String = "DATE",
+    val journalLastSyncMessageId: Long = 0,
+    val storageLastSyncMessageId: Long = 0
 )

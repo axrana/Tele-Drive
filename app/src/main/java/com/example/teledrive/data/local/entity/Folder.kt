@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "folders",
     indices = [
-        Index(value = ["telegramThreadMsgId"], unique = true),
+        Index(value = ["folderUuid"], unique = true),
+        Index(value = ["telegramThreadMsgId"]),
         Index(value = ["parentFolderId"])
     ],
     foreignKeys = [
@@ -22,11 +23,14 @@ import androidx.room.PrimaryKey
 )
 data class Folder(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val folderUuid: String,
     val name: String,
     val parentFolderId: Long? = null,
-    val telegramThreadMsgId: Long,
+    val telegramThreadMsgId: Long = 0L,
     val telegramParentThreadId: Long? = null,
     val createdDate: Long,
+    val version: Long = 1,
+    val isDeleted: Boolean = false,
     val syncState: Int = 0,
     val isDirty: Boolean = false,
     val metadataVersion: Int = 1

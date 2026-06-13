@@ -3,6 +3,7 @@ package com.example.teledrive.telegram
 import org.json.JSONObject
 
 object MetadataHelper {
+    private const val JOURNAL_PREFIX = "TD_JOURNAL_V1:"
     private const val FOLDER_PREFIX = "TD_FOLDER:"
     private const val LEGACY_FOLDER_PREFIX = "Folder:"
     private const val FILE_CAPTION_PREFIX = "TeleDriveFolder:"
@@ -67,5 +68,55 @@ object MetadataHelper {
             return caption.removePrefix(FILE_CAPTION_PREFIX).substringBefore(" ").toLongOrNull()
         }
         return null
+    }
+
+    fun formatJournalEvent(
+        eventId: String,
+        op: String,
+        objectType: String,
+        objectId: String,
+        version: Long,
+        payload: Map<String, Any?>
+    ): String {
+        val json = JSONObject().apply {
+            put("schema", 1)
+            put("eventId", eventId)
+            put("ts", System.currentTimeMillis())
+            put("op", op)
+            put("objectType", objectType)
+            put("objectId", objectId)
+            put("version", version)
+            put("payload", JSONObject(payload))
+        }
+        return "$JOURNAL_PREFIX$json"
+    }
+
+    data class ParsedJournalEvent(
+        val eventId: String,
+        val op: String,
+        val objectType: String,
+        val objectId: String,
+        val version: Long,
+        val ts: Long,
+        val payload: JSONObject
+    )
+
+    fun parseJournalEvent(text: String): ParsedJournalEvent? {
+        if (!text.startsWith(JOURNAL_PREFIX)) return null
+        return try {
+            val jsonStr = text.removePrefix(JOURNAL_PREFIX)
+            val json = JSONObject(jsonStr)
+            ParsedJournalEvent(
+                eventId = json.getString("eventId"),
+                op = json.getString("op"),
+                objectType = json.getString("objectType"),
+                objectId = json.getString("objectId"),
+                version = json.getLong("version"),
+                ts = json.getLong("ts"),
+                payload = json.getJSONObject("payload")
+            )
+        } catch (e: Exception) {
+            null
+        }
     }
 }

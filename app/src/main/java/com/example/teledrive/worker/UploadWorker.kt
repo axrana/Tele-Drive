@@ -85,7 +85,7 @@ class UploadWorker(
             inputMessage.caption = formattedCaption
 
             val query = TdApi.SendMessage()
-            query.chatId = session.channelId
+            query.chatId = session.storageChannelId
             query.inputMessageContent = inputMessage
 
             val message = tdLibraryManager.execute(query)
@@ -96,13 +96,35 @@ class UploadWorker(
             val remoteId = docContent.document.document.remote.id
             val existing = repository.getFileByTelegramFileId(remoteId)
             if (existing == null) {
+                val fileUuid = java.util.UUID.randomUUID().toString()
+                val parentFolder = if (folderId != -1L) repository.getFolderById(folderId) else null
+
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "CREATE_FILE",
+                    objectType = "file",
+                    objectId = fileUuid,
+                    version = 1,
+                    payload = mapOf(
+                        "name" to file.name,
+                        "size" to file.length(),
+                        "mimeType" to docContent.document.mimeType,
+                        "storageMessageId" to message.id,
+                        "parentFolderUuid" to parentFolder?.folderUuid
+                    )
+                )
+
                 repository.createFile(
                     FileEntity(
+                        fileUuid = fileUuid,
                         name = file.name,
+                        displayName = file.name,
                         size = file.length(),
                         mimeType = docContent.document.mimeType,
                         extension = file.extension,
                         telegramMsgId = message.id,
+                        storageMessageId = message.id,
                         telegramFileId = remoteId,
                         folderId = if (folderId == -1L) null else folderId,
                         uploadDate = System.currentTimeMillis()

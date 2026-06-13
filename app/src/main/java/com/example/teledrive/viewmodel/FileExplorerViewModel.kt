@@ -148,7 +148,20 @@ class FileExplorerViewModel(
     fun moveFile(file: FileEntity, newFolderId: Long?) {
         viewModelScope.launch {
             try {
-                repository.moveFile(file.id, newFolderId)
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+                val targetFolder = newFolderId?.let { repository.getFolderById(it) }
+
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "MOVE_FILE",
+                    objectType = "file",
+                    objectId = file.fileUuid,
+                    version = file.version + 1,
+                    payload = mapOf("toFolderUuid" to targetFolder?.folderUuid)
+                )
+
+                repository.moveFile(file.copy(folderId = newFolderId, version = file.version + 1))
                 _errorFlow.emit("File moved")
             } catch (e: Exception) {
                 _errorFlow.emit("Move failed: ${e.message}")
@@ -183,33 +196,27 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
-                if (session.channelId == 0L) {
-                    _errorFlow.emit("Storage channel not set. Check settings.")
+                if (session.journalChannelId == 0L) {
+                    _errorFlow.emit("Journal channel not set. Check settings.")
                     return@launch
                 }
 
                 val currentParentId = _currentFolderId.value
                 val parentFolder = currentParentId?.let { repository.getFolderById(it) }
-                val parentKey = parentFolder?.telegramThreadMsgId
+                val parentUuid = parentFolder?.folderUuid
+                val folderUuid = java.util.UUID.randomUUID().toString()
 
-                // Use MetadataHelper for consistent markers
-                val folderMarker = com.example.teledrive.telegram.MetadataHelper.formatFolderMetadata(name, parentKey)
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "CREATE_FOLDER",
+                    objectType = "folder",
+                    objectId = folderUuid,
+                    version = 1,
+                    payload = mapOf("name" to name, "parentId" to parentUuid)
+                )
 
-                val formattedText = TdApi.FormattedText()
-                formattedText.text = folderMarker
-
-                val content = TdApi.InputMessageText()
-                content.text = formattedText
-                content.clearDraft = true
-
-                val query = TdApi.SendMessage()
-                query.chatId = session.channelId
-                query.inputMessageContent = content
-
-                val message = tdLibraryManager.execute(query)
-                    ?: throw Exception("Telegram did not return a message")
-
-                repository.createFolder(name, currentParentId, message.id, parentKey)
+                repository.createFolder(name, currentParentId, 0L, parentFolder?.telegramThreadMsgId)
                 _errorFlow.emit("Folder '$name' created")
             } catch (e: Exception) {
                 com.example.teledrive.util.TeleDriveLogger.e("CreateFolder", "Failed", e)
@@ -333,8 +340,19 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
-                repository.deleteFileFromTelegram(tdLibraryManager, session.channelId, file.telegramMsgId)
-                repository.deleteFile(file)
+
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "DELETE_FILE",
+                    objectType = "file",
+                    objectId = file.fileUuid,
+                    version = file.version + 1,
+                    payload = emptyMap()
+                )
+
+                repository.deleteFileFromTelegram(tdLibraryManager, session.storageChannelId, file.storageMessageId)
+                repository.deleteFile(file.copy(isDeleted = true, version = file.version + 1))
             } catch (e: Exception) {
                 _errorFlow.emit("Delete failed: ${e.message}")
             }
@@ -344,7 +362,19 @@ class FileExplorerViewModel(
     fun renameFile(file: FileEntity, newName: String) {
         viewModelScope.launch {
             try {
-                repository.renameFile(file.id, newName)
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "RENAME_FILE",
+                    objectType = "file",
+                    objectId = file.fileUuid,
+                    version = file.version + 1,
+                    payload = mapOf("name" to newName)
+                )
+
+                repository.renameFile(file.copy(name = newName, displayName = newName, version = file.version + 1))
             } catch (e: Exception) {
                 _errorFlow.emit("Rename failed: ${e.message}")
             }
@@ -355,10 +385,58 @@ class FileExplorerViewModel(
         emit(repository.getFileById(id))
     }
 
+    fun copyFile(file: FileEntity, targetFolderId: Long?) {
+        viewModelScope.launch {
+            try {
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+                repository.copyFile(tdLibraryManager, session, file, targetFolderId)
+                _errorFlow.emit("File copied")
+            } catch (e: Exception) {
+                _errorFlow.emit("Copy failed: ${e.message}")
+            }
+        }
+    }
+
+    fun moveFolder(folder: Folder, newParentId: Long?) {
+        viewModelScope.launch {
+            try {
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+                val targetFolder = newParentId?.let { repository.getFolderById(it) }
+
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "MOVE_FOLDER",
+                    objectType = "folder",
+                    objectId = folder.folderUuid,
+                    version = folder.version + 1,
+                    payload = mapOf("toFolderUuid" to targetFolder?.folderUuid)
+                )
+
+                repository.moveFolder(folder.copy(parentFolderId = newParentId, version = folder.version + 1))
+                _errorFlow.emit("Folder moved")
+            } catch (e: Exception) {
+                _errorFlow.emit("Move failed: ${e.message}")
+            }
+        }
+    }
+
     fun renameFolder(folder: Folder, newName: String) {
         viewModelScope.launch {
             try {
-                repository.renameFolder(folder.id, newName)
+                val session = repository.getUserSession().firstOrNull() ?: return@launch
+
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "RENAME_FOLDER",
+                    objectType = "folder",
+                    objectId = folder.folderUuid,
+                    version = folder.version + 1,
+                    payload = mapOf("name" to newName)
+                )
+
+                repository.renameFolder(folder.copy(name = newName, version = folder.version + 1))
             } catch (e: Exception) {
                 _errorFlow.emit("Rename failed: ${e.message}")
             }
@@ -369,7 +447,18 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
-                repository.deleteFolderWithContents(tdLibraryManager, session.channelId, folder)
+
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "DELETE_FOLDER",
+                    objectType = "folder",
+                    objectId = folder.folderUuid,
+                    version = folder.version + 1,
+                    payload = emptyMap()
+                )
+
+                repository.deleteFolderWithContents(tdLibraryManager, session.storageChannelId, folder.copy(isDeleted = true, version = folder.version + 1))
             } catch (e: Exception) {
                 _errorFlow.emit("Delete folder failed: ${e.message}")
             }

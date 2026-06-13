@@ -117,7 +117,7 @@ class LoginViewModel(
                     }
                 }
 
-                val channelId = if (existingChannelId != null) {
+                val storageChannelId = if (existingChannelId != null) {
                     existingChannelId
                 } else {
                     val randomDigits = (100000..999999).random()
@@ -130,6 +130,33 @@ class LoginViewModel(
                     chat.id
                 }
 
+                // Search for existing Journal channel
+                var existingJournalId: Long? = null
+                if (chatIds != null) {
+                    for (id in chatIds) {
+                        try {
+                            val getChatQuery = TdApi.GetChat()
+                            getChatQuery.chatId = id
+                            val chat = tdLibraryManager.execute(getChatQuery)
+                            if (chat.title == "TeleDrive Journal") {
+                                existingJournalId = chat.id
+                                break
+                            }
+                        } catch (e: Exception) { e.printStackTrace() }
+                    }
+                }
+
+                val journalChannelId = if (existingJournalId != null) {
+                    existingJournalId
+                } else {
+                    val createJournalQuery = TdApi.CreateNewSupergroupChat()
+                    createJournalQuery.title = "TeleDrive Journal"
+                    createJournalQuery.isChannel = true
+                    createJournalQuery.description = "Journal for TeleDrive metadata"
+                    val chat = tdLibraryManager.execute(createJournalQuery)
+                    chat.id
+                }
+
                 repository.saveSession(
                     UserSession(
                         telegramUserId = me.id,
@@ -137,8 +164,12 @@ class LoginViewModel(
                         username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
                         firstName = me.firstName ?: "",
                         lastName = me.lastName ?: "",
-                        channelId = channelId,
+                        channelId = storageChannelId,
                         channelUsername = null,
+                        storageChannelId = storageChannelId,
+                        storageChannelUsername = null,
+                        journalChannelId = journalChannelId,
+                        journalChannelUsername = null,
                         isPremium = me.isPremium,
                         loginDate = System.currentTimeMillis()
                     )

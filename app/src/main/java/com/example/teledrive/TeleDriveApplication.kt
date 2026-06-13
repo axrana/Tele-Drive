@@ -26,14 +26,17 @@ class TeleDriveApplication : Application(), Configuration.Provider {
             return
         }
 
-        database = Room.databaseBuilder(this, TeleDriveDatabase::class.java, "teledrive.db").build()
+        database = Room.databaseBuilder(this, TeleDriveDatabase::class.java, "teledrive.db")
+            .addMigrations(TeleDriveDatabase.MIGRATION_1_2, TeleDriveDatabase.MIGRATION_2_3)
+            .build()
         repository = TeleDriveRepository(
             database.userSessionDao(),
             database.folderDao(),
             database.fileDao(),
             database.shareTokenDao(),
             database.settingsDao(),
-            database.transferDao()
+            database.transferDao(),
+            database.journalEventDao()
         )
         tdLibraryManager = TdLibraryManager(this)
     }

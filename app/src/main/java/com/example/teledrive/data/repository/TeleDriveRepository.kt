@@ -10,6 +10,7 @@ import com.example.teledrive.data.local.entity.ShareToken
 import com.example.teledrive.data.local.entity.UserSession
 import com.example.teledrive.telegram.MetadataHelper
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import org.drinkless.tdlib.TdApi
 
 class TeleDriveRepository(
@@ -18,7 +19,8 @@ class TeleDriveRepository(
     private val fileDao: FileDao,
     private val shareTokenDao: ShareTokenDao,
     private val settingsDao: com.example.teledrive.data.local.dao.SettingsDao,
-    private val transferDao: com.example.teledrive.data.local.dao.TransferDao
+    private val transferDao: com.example.teledrive.data.local.dao.TransferDao,
+    private val journalEventDao: com.example.teledrive.data.local.dao.JournalEventDao
 ) {
     fun getUserSession(): Flow<UserSession?> = userSessionDao.getUserSession()
     suspend fun saveSession(session: UserSession) = userSessionDao.insertSession(session)
@@ -28,6 +30,7 @@ class TeleDriveRepository(
     fun getAllFolders(): Flow<List<Folder>> = folderDao.getAllFolders()
     suspend fun createFolder(name: String, parentId: Long?, threadId: Long, parentThreadId: Long? = null): Long {
         val folder = Folder(
+            folderUuid = java.util.UUID.randomUUID().toString(),
             name = name,
             parentFolderId = parentId,
             telegramThreadMsgId = threadId,
@@ -37,18 +40,60 @@ class TeleDriveRepository(
         return folderDao.createFolder(folder)
     }
     suspend fun getFolderById(id: Long) = folderDao.getFolderById(id)
-    suspend fun renameFolder(id: Long, newName: String) = folderDao.renameFolder(id, newName)
-    suspend fun deleteFolder(folder: Folder) = folderDao.deleteFolder(folder)
+    suspend fun getFolderByUuid(uuid: String) = folderDao.getFolderByUuid(uuid)
+    suspend fun renameFolder(folder: Folder) = folderDao.updateFolder(folder)
+    suspend fun moveFolder(folder: Folder) = folderDao.updateFolder(folder)
+    suspend fun deleteFolder(folder: Folder) = folderDao.updateFolder(folder)
 
     fun getFiles(folderId: Long?): Flow<List<FileEntity>> = fileDao.getFilesInFolder(folderId)
     fun searchFiles(query: String): Flow<List<FileEntity>> = fileDao.searchFiles(query)
     suspend fun createFile(file: FileEntity) = fileDao.createFile(file)
     suspend fun getFileById(id: Long) = fileDao.getFileById(id)
+    suspend fun getFileByUuid(uuid: String) = fileDao.getFileByUuid(uuid)
     suspend fun getFileByTelegramFileId(telegramFileId: String) = fileDao.getFileByTelegramFileId(telegramFileId)
     suspend fun updateFile(file: FileEntity) = fileDao.updateFile(file)
-    suspend fun renameFile(id: Long, newName: String) = fileDao.renameFile(id, newName)
-    suspend fun moveFile(id: Long, folderId: Long?) = fileDao.moveFile(id, folderId)
-    suspend fun deleteFile(file: FileEntity) = fileDao.deleteFile(file)
+    suspend fun renameFile(file: FileEntity) = fileDao.updateFile(file)
+    suspend fun moveFile(file: FileEntity) = fileDao.updateFile(file)
+
+    suspend fun copyFile(
+        tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
+        session: UserSession,
+        file: FileEntity,
+        targetFolderId: Long?
+    ) {
+        val targetFolder = targetFolderId?.let { folderDao.getFolderById(it) }
+        val newFileUuid = java.util.UUID.randomUUID().toString()
+
+        // Append COPY_FILE event
+        appendJournalEvent(
+            tdLibraryManager = tdLibraryManager,
+            journalChannelId = session.journalChannelId,
+            op = "COPY_FILE",
+            objectType = "file",
+            objectId = newFileUuid,
+            version = 1,
+            payload = mapOf(
+                "sourceFileUuid" to file.fileUuid,
+                "name" to file.name,
+                "size" to file.size,
+                "storageMessageId" to file.storageMessageId,
+                "toFolderUuid" to targetFolder?.folderUuid
+            )
+        )
+
+        // For now, we create a local entry that points to the same storage message.
+        // In a full implementation, we might want to resend the message in Telegram to ensure durability.
+        val copy = file.copy(
+            id = 0,
+            fileUuid = newFileUuid,
+            folderId = targetFolderId,
+            sourceFileUuid = file.fileUuid,
+            uploadDate = System.currentTimeMillis(),
+            version = 1
+        )
+        fileDao.createFile(copy)
+    }
+    suspend fun deleteFile(file: FileEntity) = fileDao.updateFile(file)
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
     fun getFileCount(): Flow<Int> = fileDao.getFileCount()
     fun getFolderCount(): Flow<Int> = folderDao.getFolderCount()
@@ -111,10 +156,275 @@ class TeleDriveRepository(
     suspend fun clearFinishedTransfers() = transferDao.clearFinishedTransfers()
     suspend fun getTransferById(id: Long) = transferDao.getTransferById(id)
 
-    suspend fun syncFromTelegram(
+    suspend fun appendJournalEvent(
+        tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
+        journalChannelId: Long,
+        op: String,
+        objectType: String,
+        objectId: String,
+        version: Long,
+        payload: Map<String, Any?>
+    ): Long {
+        val eventUuid = java.util.UUID.randomUUID().toString()
+        val text = MetadataHelper.formatJournalEvent(
+            eventId = eventUuid,
+            op = op,
+            objectType = objectType,
+            objectId = objectId,
+            version = version,
+            payload = payload
+        )
+
+        val formattedText = TdApi.FormattedText()
+        formattedText.text = text
+        val content = TdApi.InputMessageText()
+        content.text = formattedText
+
+        val query = TdApi.SendMessage()
+        query.chatId = journalChannelId
+        query.inputMessageContent = content
+
+        val message = tdLibraryManager.execute(query)
+        val journalEvent = com.example.teledrive.data.local.entity.JournalEvent(
+            eventUuid = eventUuid,
+            objectType = objectType,
+            objectUuid = objectId,
+            op = op,
+            version = version,
+            ts = System.currentTimeMillis(),
+            telegramJournalMessageId = message.id,
+            payloadJson = payload.toString() // Simplified for now, payload is usually small
+        )
+        journalEventDao.insertEvent(journalEvent)
+        return message.id
+    }
+
+    suspend fun syncFromJournalAndStorage(
+        tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
+        session: UserSession
+    ) {
+        // 1. Fetch journal events
+        val journalMessages = fetchAllMessages(tdLibraryManager, session.journalChannelId)
+        journalMessages.forEach { msg ->
+            if (msg.content is TdApi.MessageText) {
+                val text = (msg.content as TdApi.MessageText).text.text
+                MetadataHelper.parseJournalEvent(text)?.let { parsed ->
+                    val event = com.example.teledrive.data.local.entity.JournalEvent(
+                        eventUuid = parsed.eventId,
+                        objectType = parsed.objectType,
+                        objectUuid = parsed.objectId,
+                        op = parsed.op,
+                        version = parsed.version,
+                        ts = parsed.ts,
+                        telegramJournalMessageId = msg.id,
+                        payloadJson = parsed.payload.toString()
+                    )
+                    journalEventDao.insertEvent(event)
+                }
+            }
+        }
+
+        // 2. Load storage messages
+        val storageMessages = fetchAllMessages(tdLibraryManager, session.storageChannelId)
+        val storageMap = storageMessages.filter { it.content is TdApi.MessageDocument }
+            .associateBy { it.id }
+
+        // 3. Rebuild state from journal events
+        val allEvents = journalEventDao.getAllEventsSync()
+
+        // Maps for canonical state
+        val foldersMap = mutableMapOf<String, Folder>()
+        val filesMap = mutableMapOf<String, FileEntity>()
+
+        allEvents.forEach { event ->
+            val payload = org.json.JSONObject(event.payloadJson)
+            when (event.op) {
+                "CREATE_FOLDER" -> {
+                    foldersMap[event.objectUuid] = Folder(
+                        folderUuid = event.objectUuid,
+                        name = payload.getString("name"),
+                        parentFolderId = null, // Will resolve parentUuid to parentId later
+                        createdDate = event.ts,
+                        version = event.version,
+                        telegramThreadMsgId = 0 // Optional transport ref
+                    ).apply {
+                        // Store parentUuid in a temporary way or handle in second pass
+                    }
+                }
+                "RENAME_FOLDER" -> {
+                    foldersMap[event.objectUuid]?.let {
+                        foldersMap[event.objectUuid] = it.copy(
+                            name = payload.getString("name"),
+                            version = event.version
+                        )
+                    }
+                }
+                "MOVE_FOLDER" -> {
+                    foldersMap[event.objectUuid]?.let {
+                        foldersMap[event.objectUuid] = it.copy(
+                            version = event.version
+                        )
+                    }
+                }
+                "DELETE_FOLDER" -> {
+                    foldersMap[event.objectUuid]?.let {
+                        foldersMap[event.objectUuid] = it.copy(isDeleted = true, version = event.version)
+                    }
+                }
+                "CREATE_FILE" -> {
+                    val storageMsgId = payload.getLong("storageMessageId")
+                    val msg = storageMap[storageMsgId]
+                    if (msg != null && msg.content is TdApi.MessageDocument) {
+                        val doc = (msg.content as TdApi.MessageDocument).document
+                        filesMap[event.objectUuid] = FileEntity(
+                            fileUuid = event.objectUuid,
+                            name = payload.getString("name"),
+                            displayName = payload.getString("name"),
+                            size = payload.getLong("size"),
+                            mimeType = payload.optString("mimeType"),
+                            extension = payload.getString("name").substringAfterLast('.', ""),
+                            telegramMsgId = storageMsgId,
+                            storageMessageId = storageMsgId,
+                            telegramFileId = doc.document.remote.id,
+                            folderId = null, // Resolve parentFolderUuid later
+                            uploadDate = event.ts,
+                            version = event.version
+                        )
+                    }
+                }
+                "RENAME_FILE" -> {
+                    filesMap[event.objectUuid]?.let {
+                        filesMap[event.objectUuid] = it.copy(
+                            name = payload.getString("name"),
+                            displayName = payload.getString("name"),
+                            version = event.version
+                        )
+                    }
+                }
+                "MOVE_FILE" -> {
+                    filesMap[event.objectUuid]?.let {
+                        filesMap[event.objectUuid] = it.copy(version = event.version)
+                        // Resolve toFolderUuid later
+                    }
+                }
+                "COPY_FILE" -> {
+                    val storageMsgId = payload.getLong("storageMessageId")
+                    val msg = storageMap[storageMsgId]
+                    if (msg != null && msg.content is TdApi.MessageDocument) {
+                        val doc = (msg.content as TdApi.MessageDocument).document
+                        filesMap[event.objectUuid] = FileEntity(
+                            fileUuid = event.objectUuid,
+                            name = payload.getString("name"),
+                            displayName = payload.getString("name"),
+                            size = payload.getLong("size"),
+                            mimeType = doc.mimeType,
+                            extension = payload.getString("name").substringAfterLast('.', ""),
+                            telegramMsgId = storageMsgId,
+                            storageMessageId = storageMsgId,
+                            telegramFileId = doc.document.remote.id,
+                            folderId = null,
+                            uploadDate = event.ts,
+                            version = event.version,
+                            sourceFileUuid = payload.getString("sourceFileUuid")
+                        )
+                    }
+                }
+                "DELETE_FILE" -> {
+                    filesMap[event.objectUuid]?.let {
+                        filesMap[event.objectUuid] = it.copy(isDeleted = true, version = event.version)
+                    }
+                }
+            }
+        }
+
+        // 4. Resolve hierarchies and Apply to DB
+        fileDao.clearAll()
+        folderDao.clearAll()
+
+        // Insert folders first to get internal Room IDs
+        val uuidToRoomId = mutableMapOf<String, Long>()
+        foldersMap.values.filter { !it.isDeleted }.forEach { folder ->
+            val id = folderDao.createFolder(folder)
+            uuidToRoomId[folder.folderUuid] = id
+        }
+
+        // Second pass: resolve parent relationships for folders
+        allEvents.forEach { event ->
+            if (event.op == "CREATE_FOLDER" || event.op == "MOVE_FOLDER") {
+                val payload = org.json.JSONObject(event.payloadJson)
+                val parentUuid = if (payload.isNull("parentId")) null else payload.getString("parentId")
+                val targetUuid = if (payload.has("toFolderUuid")) payload.getString("toFolderUuid") else parentUuid
+
+                if (targetUuid != null) {
+                    val folderId = uuidToRoomId[event.objectUuid]
+                    val parentId = uuidToRoomId[targetUuid]
+                    if (folderId != null && parentId != null) {
+                        folderDao.updateParentId(folderId, parentId)
+                    }
+                }
+            }
+        }
+
+        // Resolve file folders and Insert files
+        filesMap.values.filter { !it.isDeleted }.forEach { file ->
+            // Find the latest folderUuid for this file from journal
+            val latestFolderUuid = allEvents.filter { it.objectUuid == file.fileUuid && (it.op == "CREATE_FILE" || it.op == "MOVE_FILE") }
+                .lastOrNull()?.let { ev ->
+                    val p = org.json.JSONObject(ev.payloadJson)
+                    val key = if (ev.op == "CREATE_FILE") "parentFolderUuid" else "toFolderUuid"
+                    if (p.isNull(key)) null else p.getString(key)
+                }
+
+            // Special case for copied files - they might not have a MOVE_FILE event yet if just created
+            val finalFolderUuid = latestFolderUuid ?: allEvents.filter { it.objectUuid == file.fileUuid && it.op == "COPY_FILE" }
+                .lastOrNull()?.let { ev ->
+                    val p = org.json.JSONObject(ev.payloadJson)
+                    if (p.has("toFolderUuid") && !p.isNull("toFolderUuid")) p.getString("toFolderUuid") else null
+                }
+
+            val localFolderId = if (finalFolderUuid != null) uuidToRoomId[finalFolderUuid] else null
+            fileDao.createFile(file.copy(folderId = localFolderId))
+        }
+
+        // 5. Cleanup
+        // Handle Recovered bucket for orphaned storage messages not in journal
+        val storageInJournal = allEvents.filter { it.objectType == "file" && it.op == "CREATE_FILE" }
+            .map { org.json.JSONObject(it.payloadJson).getLong("storageMessageId") }
+            .toSet()
+
+        val orphans = storageMap.keys - storageInJournal
+        if (orphans.isNotEmpty()) {
+            val recoveredId = folderDao.createFolder(Folder(
+                folderUuid = "recovered",
+                name = "Recovered",
+                createdDate = System.currentTimeMillis(),
+                telegramThreadMsgId = -1
+            ))
+            orphans.forEach { msgId ->
+                val msg = storageMap[msgId]!!
+                val doc = (msg.content as TdApi.MessageDocument).document
+                fileDao.createFile(FileEntity(
+                    fileUuid = java.util.UUID.randomUUID().toString(),
+                    name = doc.fileName ?: "orphan_$msgId",
+                    displayName = doc.fileName ?: "orphan_$msgId",
+                    size = doc.document.size,
+                    mimeType = doc.mimeType,
+                    extension = doc.fileName?.substringAfterLast('.', ""),
+                    telegramMsgId = msgId,
+                    storageMessageId = msgId,
+                    telegramFileId = doc.document.remote.id,
+                    folderId = recoveredId,
+                    uploadDate = msg.date.toLong() * 1000
+                ))
+            }
+        }
+    }
+
+    private suspend fun fetchAllMessages(
         tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
         chatId: Long
-    ) {
+    ): List<TdApi.Message> {
+        if (chatId == 0L) return emptyList()
         val limit = 100
         val allMessages = mutableListOf<TdApi.Message>()
         var lastMessageId = 0L
@@ -133,108 +443,96 @@ class TeleDriveRepository(
             lastMessageId = messages.messages.last().id
             if (messages.messages.size < limit) break
         }
+        return allMessages
+    }
 
-        // Process text markers for folders
+    suspend fun syncFromTelegram(
+        tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
+        chatId: Long
+    ) {
+        val session = userSessionDao.getUserSession().firstOrNull() ?: return
+
+        // If we have journal, use it.
+        if (session.journalChannelId != 0L) {
+            syncFromJournalAndStorage(tdLibraryManager, session)
+
+            // One-time legacy import if journal is empty
+            val eventCount = journalEventDao.getAllEventsSync().size
+            if (eventCount == 0) {
+                importLegacyData(tdLibraryManager, session)
+                syncFromJournalAndStorage(tdLibraryManager, session)
+            }
+        }
+    }
+
+    private suspend fun importLegacyData(
+        tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
+        session: UserSession
+    ) {
+        com.example.teledrive.util.TeleDriveLogger.d("Import", "Starting legacy import from channel ${session.channelId}")
+        val allMessages = fetchAllMessages(tdLibraryManager, session.channelId)
+
+        // 1. Process Folders
+        val oldThreadToNewUuid = mutableMapOf<Long, String>()
         allMessages.forEach { msg ->
             if (msg.content is TdApi.MessageText) {
-                try {
-                    val text = (msg.content as TdApi.MessageText).text.text
-                    MetadataHelper.parseFolderMetadata(text)?.let { meta ->
-                        val existing = folderDao.getFolderByThreadId(msg.id)
-                        if (existing == null) {
-                            folderDao.createFolder(
-                                Folder(
-                                    name = meta.name,
-                                    telegramThreadMsgId = msg.id,
-                                    telegramParentThreadId = meta.parentId,
-                                    createdDate = msg.date.toLong() * 1000
-                                )
-                            )
-                        } else {
-                            folderDao.updateFolder(
-                                existing.copy(
-                                    name = meta.name,
-                                    telegramParentThreadId = meta.parentId
-                                )
+                val text = (msg.content as TdApi.MessageText).text.text
+                MetadataHelper.parseFolderMetadata(text)?.let { meta ->
+                    val newUuid = java.util.UUID.randomUUID().toString()
+                    oldThreadToNewUuid[msg.id] = newUuid
+                    appendJournalEvent(
+                        tdLibraryManager, session.journalChannelId,
+                        op = "CREATE_FOLDER", objectType = "folder",
+                        objectId = newUuid,
+                        version = 1,
+                        payload = mapOf("name" to meta.name, "parentId" to null)
+                    )
+                }
+            }
+        }
+
+        // Second pass for folder hierarchy
+        allMessages.forEach { msg ->
+            if (msg.content is TdApi.MessageText) {
+                val text = (msg.content as TdApi.MessageText).text.text
+                MetadataHelper.parseFolderMetadata(text)?.let { meta ->
+                    if (meta.parentId != null && meta.parentId != 0L) {
+                        val folderUuid = oldThreadToNewUuid[msg.id]
+                        val parentUuid = oldThreadToNewUuid[meta.parentId]
+                        if (folderUuid != null && parentUuid != null) {
+                            appendJournalEvent(
+                                tdLibraryManager, session.journalChannelId,
+                                op = "MOVE_FOLDER", objectType = "folder",
+                                objectId = folderUuid,
+                                version = 2,
+                                payload = mapOf("toFolderUuid" to parentUuid)
                             )
                         }
                     }
-                } catch (e: Exception) {
-                    com.example.teledrive.util.TeleDriveLogger.e("Sync", "Folder parse error msgId=${msg.id}", e)
                 }
             }
         }
 
-        // Rebuild folder hierarchy
-        val allLocalFolders = folderDao.getAllFoldersSync()
-        allLocalFolders.forEach { folder ->
-            val parentThreadId = folder.telegramParentThreadId
-            if (parentThreadId != null) {
-                val parent = folderDao.getFolderByThreadId(parentThreadId)
-                if (parent != null && folder.parentFolderId != parent.id) {
-                    folderDao.updateParentId(folder.id, parent.id)
-                }
-            }
-        }
-
-        // Sync files from messages
-        var recoveredFolderId: Long? = null
+        // 2. Process Files
         allMessages.forEach { msg ->
             if (msg.content is TdApi.MessageDocument) {
-                try {
-                    val docContent = msg.content as TdApi.MessageDocument
-                    val doc = docContent.document ?: return@forEach
-                    val caption = docContent.caption?.text ?: ""
+                val doc = (msg.content as TdApi.MessageDocument).document
+                val caption = (msg.content as TdApi.MessageDocument).caption?.text ?: ""
+                val oldParentThreadId = MetadataHelper.parseFileFolderId(caption)
+                val parentUuid = oldParentThreadId?.let { oldThreadToNewUuid[it] }
 
-                    val telegramFolderId = MetadataHelper.parseFileFolderId(caption)
-                    var localFolderId = telegramFolderId?.let { folderDao.getFolderByThreadId(it)?.id }
-
-                    if (telegramFolderId != null && localFolderId == null) {
-                        if (recoveredFolderId == null) {
-                            val existingRecovered = folderDao.getAllFoldersSync()
-                                .find { it.name == "Recovered" && it.parentFolderId == null }
-                            recoveredFolderId = existingRecovered?.id ?: folderDao.createFolder(
-                                Folder(
-                                    name = "Recovered",
-                                    telegramThreadMsgId = -1L,
-                                    createdDate = System.currentTimeMillis()
-                                )
-                            )
-                        }
-                        localFolderId = recoveredFolderId
-                    }
-
-                    val remoteId = doc.document?.remote?.id ?: ""
-                    val existingFile = if (remoteId.isNotEmpty()) {
-                        fileDao.getFileByTelegramFileId(remoteId)
-                    } else {
-                        fileDao.getFileByTelegramMsgId(msg.id)
-                    }
-
-                    if (existingFile == null) {
-                        fileDao.createFile(
-                            FileEntity(
-                                name = doc.fileName ?: "unnamed",
-                                size = doc.document?.size ?: 0L,
-                                mimeType = doc.mimeType,
-                                extension = (doc.fileName ?: "").substringAfterLast('.', ""),
-                                telegramMsgId = msg.id,
-                                telegramFileId = remoteId,
-                                folderId = localFolderId,
-                                uploadDate = msg.date.toLong() * 1000
-                            )
-                        )
-                    } else {
-                        if (existingFile.folderId != localFolderId || existingFile.telegramMsgId != msg.id) {
-                            fileDao.updateFile(existingFile.copy(
-                                folderId = localFolderId,
-                                telegramMsgId = msg.id
-                            ))
-                        }
-                    }
-                } catch (e: Exception) {
-                    com.example.teledrive.util.TeleDriveLogger.e("Sync", "File parse error msgId=${msg.id}", e)
-                }
+                appendJournalEvent(
+                    tdLibraryManager, session.journalChannelId,
+                    op = "CREATE_FILE", objectType = "file",
+                    objectId = java.util.UUID.randomUUID().toString(),
+                    version = 1,
+                    payload = mapOf(
+                        "name" to (doc.fileName ?: "imported"),
+                        "size" to doc.document.size,
+                        "storageMessageId" to msg.id,
+                        "parentFolderUuid" to parentUuid
+                    )
+                )
             }
         }
     }

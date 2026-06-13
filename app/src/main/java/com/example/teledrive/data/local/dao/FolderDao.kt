@@ -6,10 +6,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FolderDao {
-    @Query("SELECT * FROM folders")
+    @Query("SELECT * FROM folders WHERE isDeleted = 0")
     fun getAllFolders(): Flow<List<Folder>>
 
-    @Query("SELECT * FROM folders")
+    @Query("SELECT * FROM folders WHERE isDeleted = 0")
     suspend fun getAllFoldersSync(): List<Folder>
 
     @Query("SELECT * FROM folders WHERE id = :id")
@@ -18,7 +18,10 @@ interface FolderDao {
     @Query("SELECT * FROM folders WHERE telegramThreadMsgId = :msgId")
     suspend fun getFolderByThreadId(msgId: Long): Folder?
 
-    @Query("SELECT * FROM folders WHERE parentFolderId IS :parentId")
+    @Query("SELECT * FROM folders WHERE folderUuid = :uuid")
+    suspend fun getFolderByUuid(uuid: String): Folder?
+
+    @Query("SELECT * FROM folders WHERE parentFolderId IS :parentId AND isDeleted = 0")
     fun getFoldersInParent(parentId: Long?): Flow<List<Folder>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -36,6 +39,9 @@ interface FolderDao {
     @Query("UPDATE folders SET parentFolderId = :parentId WHERE id = :id")
     suspend fun updateParentId(id: Long, parentId: Long?)
 
-    @Query("SELECT COUNT(*) FROM folders")
+    @Query("SELECT COUNT(*) FROM folders WHERE isDeleted = 0")
     fun getFolderCount(): Flow<Int>
+
+    @Query("DELETE FROM folders")
+    suspend fun clearAll()
 }

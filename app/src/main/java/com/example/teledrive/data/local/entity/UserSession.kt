@@ -11,8 +11,12 @@ data class UserSession(
     val username: String?,
     val firstName: String?,
     val lastName: String?,
-    val channelId: Long,
-    val channelUsername: String?,
+    val channelId: Long, // Deprecated but keeping for migration
+    val channelUsername: String?, // Deprecated but keeping for migration
+    val storageChannelId: Long,
+    val storageChannelUsername: String?,
+    val journalChannelId: Long,
+    val journalChannelUsername: String?,
     val isPremium: Boolean,
     val loginDate: Long
 )

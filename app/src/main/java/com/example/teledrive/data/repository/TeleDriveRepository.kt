@@ -137,24 +137,30 @@ class TeleDriveRepository(
         // Process text markers for folders
         allMessages.forEach { msg ->
             if (msg.content is TdApi.MessageText) {
-                val text = (msg.content as TdApi.MessageText).text.text
-                MetadataHelper.parseFolderMetadata(text)?.let { meta ->
-                    val existing = folderDao.getFolderByThreadId(msg.id)
-                    if (existing == null) {
-                        folderDao.createFolder(
-                            Folder(
-                                name = meta.name,
-                                telegramThreadMsgId = msg.id,
-                                telegramParentThreadId = meta.parentId,
-                                createdDate = msg.date.toLong() * 1000
+                try {
+                    val text = (msg.content as TdApi.MessageText).text.text
+                    MetadataHelper.parseFolderMetadata(text)?.let { meta ->
+                        val existing = folderDao.getFolderByThreadId(msg.id)
+                        if (existing == null) {
+                            folderDao.createFolder(
+                                Folder(
+                                    name = meta.name,
+                                    telegramThreadMsgId = msg.id,
+                                    telegramParentThreadId = meta.parentId,
+                                    createdDate = msg.date.toLong() * 1000
+                                )
                             )
-                        )
-                    } else {
-                        folderDao.updateFolder(existing.copy(
-                            name = meta.name,
-                            telegramParentThreadId = meta.parentId
-                        ))
+                        } else {
+                            folderDao.updateFolder(
+                                existing.copy(
+                                    name = meta.name,
+                                    telegramParentThreadId = meta.parentId
+                                )
+                            )
+                        }
                     }
+                } catch (e: Exception) {
+                    com.example.teledrive.util.TeleDriveLogger.e("Sync", "Folder parse error msgId=${msg.id}", e)
                 }
             }
         }
@@ -175,44 +181,48 @@ class TeleDriveRepository(
         var recoveredFolderId: Long? = null
         allMessages.forEach { msg ->
             if (msg.content is TdApi.MessageDocument) {
-                val docContent = msg.content as TdApi.MessageDocument
-                val doc = docContent.document
-                val caption = docContent.caption?.text ?: ""
+                try {
+                    val docContent = msg.content as TdApi.MessageDocument
+                    val doc = docContent.document ?: return@forEach
+                    val caption = docContent.caption?.text ?: ""
 
-                val telegramFolderId = MetadataHelper.parseFileFolderId(caption)
-                var localFolderId = telegramFolderId?.let { folderDao.getFolderByThreadId(it)?.id }
+                    val telegramFolderId = MetadataHelper.parseFileFolderId(caption)
+                    var localFolderId = telegramFolderId?.let { folderDao.getFolderByThreadId(it)?.id }
 
-                if (telegramFolderId != null && localFolderId == null) {
-                    if (recoveredFolderId == null) {
-                        val existingRecovered = folderDao.getAllFoldersSync()
-                            .find { it.name == "Recovered" && it.parentFolderId == null }
-                        recoveredFolderId = existingRecovered?.id ?: folderDao.createFolder(
-                            Folder(
-                                name = "Recovered",
-                                telegramThreadMsgId = -1L,
-                                createdDate = System.currentTimeMillis()
+                    if (telegramFolderId != null && localFolderId == null) {
+                        if (recoveredFolderId == null) {
+                            val existingRecovered = folderDao.getAllFoldersSync()
+                                .find { it.name == "Recovered" && it.parentFolderId == null }
+                            recoveredFolderId = existingRecovered?.id ?: folderDao.createFolder(
+                                Folder(
+                                    name = "Recovered",
+                                    telegramThreadMsgId = -1L,
+                                    createdDate = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                        localFolderId = recoveredFolderId
+                    }
+
+                    val existingFile = fileDao.getFileByTelegramMsgId(msg.id)
+                    if (existingFile == null) {
+                        fileDao.createFile(
+                            FileEntity(
+                                name = doc.fileName ?: "unnamed",
+                                size = doc.document?.size ?: 0L,
+                                mimeType = doc.mimeType,
+                                extension = (doc.fileName ?: "").substringAfterLast('.', ""),
+                                telegramMsgId = msg.id,
+                                telegramFileId = doc.document?.remote?.id ?: "",
+                                folderId = localFolderId,
+                                uploadDate = msg.date.toLong() * 1000
                             )
                         )
+                    } else if (existingFile.folderId != localFolderId) {
+                        fileDao.updateFile(existingFile.copy(folderId = localFolderId))
                     }
-                    localFolderId = recoveredFolderId
-                }
-
-                val existingFile = fileDao.getFileByTelegramMsgId(msg.id)
-                if (existingFile == null) {
-                    fileDao.createFile(
-                        FileEntity(
-                            name = doc.fileName ?: "unnamed",
-                            size = doc.document.size,
-                            mimeType = doc.mimeType,
-                            extension = (doc.fileName ?: "").substringAfterLast('.', ""),
-                            telegramMsgId = msg.id,
-                            telegramFileId = doc.document.remote.id,
-                            folderId = localFolderId,
-                            uploadDate = msg.date.toLong() * 1000
-                        )
-                    )
-                } else if (existingFile.folderId != localFolderId) {
-                    fileDao.updateFile(existingFile.copy(folderId = localFolderId))
+                } catch (e: Exception) {
+                    com.example.teledrive.util.TeleDriveLogger.e("Sync", "File parse error msgId=${msg.id}", e)
                 }
             }
         }

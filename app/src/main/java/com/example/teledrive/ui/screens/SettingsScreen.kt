@@ -1,7 +1,6 @@
 package com.example.teledrive.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -20,7 +19,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.teledrive.data.local.entity.Settings
 import com.example.teledrive.ui.theme.*
 
@@ -38,13 +36,12 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold) },
+                title = { Text("Settings", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                }
             )
         }
     ) { padding ->
@@ -55,54 +52,25 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // Profile card
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, TeleBluePrimary.copy(alpha = 0.1f))
             ) {
-                Row(
-                    modifier = Modifier.padding(24.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(TeleBluePrimary)
-                            .border(4.dp, Color.White.copy(alpha = 0.2f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(40.dp))
+                Row(modifier = Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(TeleBluePrimary), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
                     }
                     Spacer(Modifier.width(20.dp))
                     Column {
-                        Text(
-                            "Tele Drive User",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        Text("Tele Drive User", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = TeleBlueDark)
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Channel: ${channelId ?: "Not set"}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
+                        Text("Channel ID: ${channelId ?: "Not set"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
                         Spacer(Modifier.height(8.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = TeleBluePrimary
-                        ) {
-                            Text(
-                                "Connected",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Surface(shape = CircleShape, color = TeleBluePrimary.copy(alpha = 0.15f)) {
+                            Text("Connected", modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = TeleBluePrimary, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -140,27 +108,27 @@ fun SettingsScreen(
 
             // About section
             SettingsSectionHeader("About")
-            SettingsInfoItem(icon = Icons.Default.Info, iconTint = TeleBlueLight, title = "App Version", value = "1.1.0")
+            SettingsInfoItem(icon = Icons.Default.Info, iconTint = TeleBlueLight, title = "App Version", value = "1.2.0")
             SettingsDivider()
             SettingsInfoItem(icon = Icons.Default.Storage, iconTint = ColorArchive, title = "Storage Limit", value = "50 GB (Telegram)")
             SettingsDivider()
             SettingsInfoItem(icon = Icons.Default.Security, iconTint = TeleSuccess, title = "Encryption", value = "End-to-end (Telegram)")
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
 
             // Logout button
             Button(
                 onClick = { showLogoutDialog = true },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(52.dp),
-                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(56.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
-                Spacer(Modifier.width(10.dp))
-                Text("Sign Out", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(12.dp))
+                Text("Sign Out", fontWeight = FontWeight.Bold)
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
         }
     }
 
@@ -184,91 +152,45 @@ fun SettingsScreen(
 @Composable
 fun SettingsSectionHeader(title: String) {
     Text(
-        title.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
+        title,
+        style = MaterialTheme.typography.labelLarge,
         color = TeleBluePrimary,
         fontWeight = FontWeight.ExtraBold,
-        letterSpacing = 1.sp,
-        modifier = Modifier.padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 8.dp)
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
     )
 }
 
 @Composable
 fun SettingsDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 72.dp, end = 24.dp),
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-    )
+    HorizontalDivider(modifier = Modifier.padding(start = 72.dp, end = 16.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 }
 
 @Composable
-fun SettingsSwitchItem(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    enabled: Boolean = true
-) {
+fun SettingsSwitchItem(icon: ImageVector, iconTint: Color, title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true) {
     ListItem(
-        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
-        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodyMedium) },
+        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium) },
+        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
         leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(iconTint.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = if (enabled) iconTint else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
+            Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(iconTint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = if (enabled) iconTint else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
             }
         },
         trailingContent = {
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                enabled = enabled,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = TeleBluePrimary,
-                    uncheckedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                )
-            )
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled,
+                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = TeleBluePrimary))
+        }
     )
 }
 
 @Composable
 fun SettingsInfoItem(icon: ImageVector, iconTint: Color, title: String, value: String) {
     ListItem(
-        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+        headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium) },
         leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(iconTint.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(iconTint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                 Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
             }
         },
-        trailingContent = {
-            Text(
-                value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        trailingContent = { Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
     )
 }

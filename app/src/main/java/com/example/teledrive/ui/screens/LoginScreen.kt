@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,13 +45,9 @@ fun LoginScreen(viewModel: LoginViewModel) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = if (MaterialTheme.colorScheme.surface == Color(0xFF0F172A)) {
-                        listOf(Color(0xFF1E293B), Color(0xFF0F172A))
-                    } else {
-                        listOf(TeleBluePrimary, TeleBlueLight, Color.White)
-                    },
+                    colors = listOf(TeleBluePrimary, TeleBlueLight, Color.White),
                     startY = 0f,
-                    endY = 1200f
+                    endY = 1000f
                 )
             )
     ) {
@@ -62,46 +60,37 @@ fun LoginScreen(viewModel: LoginViewModel) {
             // Logo area
             Box(
                 modifier = Modifier
-                    .size(120.dp)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color.White.copy(alpha = 0.15f))
-                    .padding(2.dp),
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(30.dp),
-                    color = Color.White.copy(alpha = 0.1f)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Cloud,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(64.dp)
-                        )
-                    }
-                }
+                Icon(
+                    Icons.Default.Cloud,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(60.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 "Tele Drive",
-                style = MaterialTheme.typography.displayLarge,
+                fontSize = 36.sp,
+                fontWeight = FontWeight.ExtraBold,
                 color = Color.White,
-                fontWeight = FontWeight.ExtraBold
+                letterSpacing = 1.sp
             )
-            Spacer(Modifier.height(8.dp))
             Text(
-                "Fast, Secure & Private Cloud Storage",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.7f),
+                "Your personal Telegram cloud storage",
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 48.dp)
+                modifier = Modifier.padding(horizontal = 40.dp)
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(56.dp))
 
             // Card
             Card(
@@ -110,169 +99,113 @@ fun LoginScreen(viewModel: LoginViewModel) {
                     .padding(horizontal = 24.dp),
                 shape = RoundedCornerShape(32.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier.padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    AnimatedContent(targetState = uiState, label = "login_state") { state ->
+                    AnimatedContent(
+                        targetState = uiState,
+                        label = "login_state",
+                        transitionSpec = { fadeIn() togetherWith fadeOut() }
+                    ) { state ->
                         when (state) {
                             is LoginUiState.WaitPhoneNumber -> {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(CircleShape)
-                                            .background(TeleBluePrimary.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Phone,
-                                            contentDescription = null,
-                                            tint = TeleBluePrimary,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(16.dp))
                                     Text(
                                         "Welcome Back",
                                         style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold
+                                        fontWeight = FontWeight.Bold
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Text(
-                                        "Enter your phone to sign in",
+                                        "Enter your phone to continue",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(Modifier.height(32.dp))
                                     OutlinedTextField(
                                         value = phone,
                                         onValueChange = { phone = it },
-                                        label = { Text("Phone Number") },
-                                        placeholder = { Text("+1 123 456 7890") },
-                                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                                        label = { Text("Phone number") },
+                                        placeholder = { Text("+1 234 567 8900") },
+                                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = TeleBluePrimary) },
                                         modifier = Modifier.fillMaxWidth(),
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                         singleLine = true,
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TeleBluePrimary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                        )
+                                        shape = RoundedCornerShape(16.dp)
                                     )
                                     Spacer(Modifier.height(24.dp))
                                     Button(
-                                        onClick = { if (phone.isNotBlank()) viewModel.submitPhoneNumber(phone) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(56.dp),
-                                        shape = RoundedCornerShape(16.dp),
-                                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                        onClick = { viewModel.submitPhoneNumber(phone) },
+                                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                                        shape = RoundedCornerShape(16.dp)
                                     ) {
-                                        Text("Continue", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("Continue", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
                             is LoginUiState.WaitCode -> {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(CircleShape)
-                                            .background(TeleBluePrimary.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Dialpad,
-                                            contentDescription = null,
-                                            tint = TeleBluePrimary,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(16.dp))
                                     Text(
                                         "Verification",
                                         style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold
+                                        fontWeight = FontWeight.Bold
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Text(
-                                        "Check your Telegram app for the code",
+                                        "Code sent to your Telegram app",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
                                     )
                                     Spacer(Modifier.height(32.dp))
                                     OutlinedTextField(
                                         value = code,
                                         onValueChange = { code = it },
-                                        label = { Text("Code") },
+                                        label = { Text("Enter OTP") },
                                         placeholder = { Text("12345") },
+                                        leadingIcon = { Icon(Icons.Default.Dialpad, null, tint = TeleBluePrimary) },
                                         modifier = Modifier.fillMaxWidth(),
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         singleLine = true,
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TeleBluePrimary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                        )
+                                        shape = RoundedCornerShape(16.dp)
                                     )
                                     Spacer(Modifier.height(24.dp))
                                     Button(
-                                        onClick = { if (code.isNotBlank()) viewModel.submitCode(code) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(56.dp),
-                                        shape = RoundedCornerShape(16.dp),
-                                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                        onClick = { viewModel.submitCode(code) },
+                                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                                        shape = RoundedCornerShape(16.dp)
                                     ) {
-                                        Text("Verify", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("Verify", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Spacer(Modifier.height(16.dp))
                                     TextButton(onClick = { viewModel.submitPhoneNumber(phone) }) {
-                                        Text("Resend code", style = MaterialTheme.typography.labelLarge, color = TeleBluePrimary)
+                                        Text("Resend code", fontWeight = FontWeight.Medium)
                                     }
                                 }
                             }
                             is LoginUiState.WaitPassword -> {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(CircleShape)
-                                            .background(TeleBluePrimary.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Lock,
-                                            contentDescription = null,
-                                            tint = TeleBluePrimary,
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(16.dp))
                                     Text(
                                         "Two-Step Verification",
                                         style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold,
+                                        fontWeight = FontWeight.Bold,
                                         textAlign = TextAlign.Center
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Text(
-                                        "Your account is protected by an additional password",
+                                        "Enter your 2FA password",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                        textAlign = TextAlign.Center
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(Modifier.height(32.dp))
                                     OutlinedTextField(
                                         value = password,
                                         onValueChange = { password = it },
                                         label = { Text("Password") },
+                                        leadingIcon = { Icon(Icons.Default.Lock, null, tint = TeleBluePrimary) },
                                         modifier = Modifier.fillMaxWidth(),
                                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -281,38 +214,34 @@ fun LoginScreen(viewModel: LoginViewModel) {
                                         trailingIcon = {
                                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                                 Icon(
-                                                    Icons.Default.Lock,
-                                                    contentDescription = null,
-                                                    tint = if (passwordVisible) TeleBluePrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                    contentDescription = null
                                                 )
                                             }
-                                        },
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TeleBluePrimary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                        )
+                                        }
                                     )
                                     Spacer(Modifier.height(24.dp))
                                     Button(
-                                        onClick = { if (password.isNotBlank()) viewModel.submitPassword(password) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(56.dp),
-                                        shape = RoundedCornerShape(16.dp),
-                                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                        onClick = { viewModel.submitPassword(password) },
+                                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                                        shape = RoundedCornerShape(16.dp)
                                     ) {
-                                        Text("Confirm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Text("Confirm", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
                             is LoginUiState.Loading -> {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(32.dp)
+                                    modifier = Modifier.padding(16.dp)
                                 ) {
-                                    CircularProgressIndicator(color = TeleBluePrimary)
-                                    Spacer(Modifier.height(16.dp))
-                                    Text("Connecting to Telegram...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    CircularProgressIndicator(color = TeleBluePrimary, strokeWidth = 3.dp)
+                                    Spacer(Modifier.height(24.dp))
+                                    Text(
+                                        "Securing connection...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                             else -> {}
@@ -321,12 +250,14 @@ fun LoginScreen(viewModel: LoginViewModel) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.weight(1f))
             Text(
-                "Secure • Private • Free",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 12.sp
+                "Secure • Private • Cloud",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
+            Spacer(Modifier.height(32.dp))
         }
     }
 }

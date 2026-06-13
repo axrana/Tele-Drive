@@ -121,7 +121,7 @@ fun FileExplorerScreen(
                         }
                         var showSortMenu by remember { mutableStateOf(false) }
                         IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.Default.Sort, contentDescription = "Sort")
+                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
                         }
                         DropdownMenu(
                             expanded = showSortMenu,
@@ -143,7 +143,7 @@ fun FileExplorerScreen(
                         }
                         IconButton(onClick = { viewModel.toggleViewMode() }) {
                             Icon(
-                                if (isGridView) Icons.Default.ViewList else Icons.Default.GridView,
+                                if (isGridView) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
                                 contentDescription = "Toggle View"
                             )
                         }
@@ -809,7 +809,7 @@ fun ItemContextMenu(
             )
             ContextMenuItem(icon = Icons.Default.Edit, label = "Rename", onClick = { onRename(); onDismiss() })
             if (onMove != null) {
-                ContextMenuItem(icon = Icons.Default.DriveFileMove, label = "Move to Folder", onClick = { onMove(); onDismiss() })
+                ContextMenuItem(icon = Icons.AutoMirrored.Filled.DriveFileMove, label = "Move to Folder", onClick = { onMove(); onDismiss() })
             }
             Spacer(Modifier.height(8.dp))
             ContextMenuItem(

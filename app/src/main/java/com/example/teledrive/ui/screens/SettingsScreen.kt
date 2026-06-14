@@ -1,6 +1,5 @@
 package com.example.teledrive.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -58,7 +57,7 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = BorderStroke(1.dp, TeleBluePrimary.copy(alpha = 0.1f))
+                border = androidx.compose.foundation.BorderStroke(1.dp, TeleBluePrimary.copy(alpha = 0.1f))
             ) {
                 Row(modifier = Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(TeleBluePrimary), contentAlignment = Alignment.Center) {

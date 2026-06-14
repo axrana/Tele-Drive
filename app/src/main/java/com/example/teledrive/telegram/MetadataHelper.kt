@@ -86,7 +86,6 @@ object MetadataHelper {
             put("objectType", objectType)
             put("objectId", objectId)
             put("version", version)
-
             val payloadJson = JSONObject()
             payload.forEach { (key, value) ->
                 when (value) {

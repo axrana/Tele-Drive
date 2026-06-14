@@ -55,11 +55,6 @@ class UploadWorker(
             val session = repository.getUserSession().firstOrNull()
                 ?: return@coroutineScope Result.failure()
 
-            // Guard against unconfigured storage channel
-            if (session.storageChannelId == 0L) {
-                return@coroutineScope Result.failure()
-            }
-
             val progressJob = launch {
                 tdLibraryManager.fileUpdates.collect { tdFile ->
                     if (tdFile.local.path == file.absolutePath && tdFile.size > 0) {
@@ -104,23 +99,21 @@ class UploadWorker(
                 val fileUuid = java.util.UUID.randomUUID().toString()
                 val parentFolder = if (folderId != -1L) repository.getFolderById(folderId) else null
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "CREATE_FILE",
-                        objectType = "file",
-                        objectId = fileUuid,
-                        version = 1,
-                        payload = mapOf(
-                            "name" to file.name,
-                            "size" to file.length(),
-                            "mimeType" to docContent.document.mimeType,
-                            "storageMessageId" to message.id,
-                            "parentFolderUuid" to parentFolder?.folderUuid
-                        )
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "CREATE_FILE",
+                    objectType = "file",
+                    objectId = fileUuid,
+                    version = 1,
+                    payload = mapOf(
+                        "name" to file.name,
+                        "size" to file.length(),
+                        "mimeType" to docContent.document.mimeType,
+                        "storageMessageId" to message.id,
+                        "parentFolderUuid" to parentFolder?.folderUuid
                     )
-                }
+                )
 
                 repository.createFile(
                     FileEntity(

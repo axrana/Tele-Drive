@@ -183,10 +183,10 @@ class TeleDriveRepository(
 
         val query = TdApi.SendMessage()
         query.chatId = journalChannelId
+        query.replyToMessageId = 0L
         query.inputMessageContent = content
 
         val message = tdLibraryManager.execute(query)
-
         val jsonObj = JSONObject()
         payload.forEach { (key, value) ->
             when (value) {
@@ -199,7 +199,6 @@ class TeleDriveRepository(
                 else -> jsonObj.put(key, value.toString())
             }
         }
-
         val journalEvent = com.example.teledrive.data.local.entity.JournalEvent(
             eventUuid = eventUuid,
             objectType = objectType,
@@ -252,22 +251,24 @@ class TeleDriveRepository(
         val filesMap = mutableMapOf<String, FileEntity>()
 
         allEvents.forEach { event ->
-            val payload = JSONObject(event.payloadJson)
+            val payload = org.json.JSONObject(event.payloadJson)
             when (event.op) {
                 "CREATE_FOLDER" -> {
                     foldersMap[event.objectUuid] = Folder(
                         folderUuid = event.objectUuid,
-                        name = payload.optString("name", "Unnamed"),
-                        parentFolderId = null,
+                        name = payload.getString("name"),
+                        parentFolderId = null, // Will resolve parentUuid to parentId later
                         createdDate = event.ts,
                         version = event.version,
-                        telegramThreadMsgId = 0
-                    )
+                        telegramThreadMsgId = 0 // Optional transport ref
+                    ).apply {
+                        // Store parentUuid in a temporary way or handle in second pass
+                    }
                 }
                 "RENAME_FOLDER" -> {
                     foldersMap[event.objectUuid]?.let {
                         foldersMap[event.objectUuid] = it.copy(
-                            name = payload.optString("name", it.name),
+                            name = payload.getString("name"),
                             version = event.version
                         )
                     }
@@ -285,22 +286,21 @@ class TeleDriveRepository(
                     }
                 }
                 "CREATE_FILE" -> {
-                    val storageMsgId = payload.optLong("storageMessageId", 0L)
+                    val storageMsgId = payload.getLong("storageMessageId")
                     val msg = storageMap[storageMsgId]
                     if (msg != null && msg.content is TdApi.MessageDocument) {
                         val doc = (msg.content as TdApi.MessageDocument).document
-                        val name = payload.optString("name", "unnamed")
                         filesMap[event.objectUuid] = FileEntity(
                             fileUuid = event.objectUuid,
-                            name = name,
-                            displayName = name,
-                            size = payload.optLong("size", 0L),
+                            name = payload.getString("name"),
+                            displayName = payload.getString("name"),
+                            size = payload.getLong("size"),
                             mimeType = payload.optString("mimeType"),
-                            extension = name.substringAfterLast('.', ""),
+                            extension = payload.getString("name").substringAfterLast('.', ""),
                             telegramMsgId = storageMsgId,
                             storageMessageId = storageMsgId,
                             telegramFileId = doc.document.remote.id,
-                            folderId = null,
+                            folderId = null, // Resolve parentFolderUuid later
                             uploadDate = event.ts,
                             version = event.version
                         )
@@ -308,10 +308,9 @@ class TeleDriveRepository(
                 }
                 "RENAME_FILE" -> {
                     filesMap[event.objectUuid]?.let {
-                        val name = payload.optString("name", it.name)
                         filesMap[event.objectUuid] = it.copy(
-                            name = name,
-                            displayName = name,
+                            name = payload.getString("name"),
+                            displayName = payload.getString("name"),
                             version = event.version
                         )
                     }
@@ -319,28 +318,28 @@ class TeleDriveRepository(
                 "MOVE_FILE" -> {
                     filesMap[event.objectUuid]?.let {
                         filesMap[event.objectUuid] = it.copy(version = event.version)
+                        // Resolve toFolderUuid later
                     }
                 }
                 "COPY_FILE" -> {
-                    val storageMsgId = payload.optLong("storageMessageId", 0L)
+                    val storageMsgId = payload.getLong("storageMessageId")
                     val msg = storageMap[storageMsgId]
                     if (msg != null && msg.content is TdApi.MessageDocument) {
                         val doc = (msg.content as TdApi.MessageDocument).document
-                        val name = payload.optString("name", "unnamed")
                         filesMap[event.objectUuid] = FileEntity(
                             fileUuid = event.objectUuid,
-                            name = name,
-                            displayName = name,
-                            size = payload.optLong("size", 0L),
+                            name = payload.getString("name"),
+                            displayName = payload.getString("name"),
+                            size = payload.getLong("size"),
                             mimeType = doc.mimeType,
-                            extension = name.substringAfterLast('.', ""),
+                            extension = payload.getString("name").substringAfterLast('.', ""),
                             telegramMsgId = storageMsgId,
                             storageMessageId = storageMsgId,
                             telegramFileId = doc.document.remote.id,
                             folderId = null,
                             uploadDate = event.ts,
                             version = event.version,
-                            sourceFileUuid = payload.optString("sourceFileUuid", "").takeIf { it.isNotEmpty() }
+                            sourceFileUuid = payload.getString("sourceFileUuid")
                         )
                     }
                 }
@@ -374,11 +373,11 @@ class TeleDriveRepository(
         // Second pass: resolve parent relationships for folders
         allEvents.forEach { event ->
             if (event.op == "CREATE_FOLDER" || event.op == "MOVE_FOLDER") {
-                val payload = JSONObject(event.payloadJson)
+                val payload = org.json.JSONObject(event.payloadJson)
                 val parentUuid = if (payload.isNull("parentId")) null else payload.optString("parentId", "")
                 val targetUuid = if (payload.has("toFolderUuid")) payload.optString("toFolderUuid", "") else parentUuid
 
-                if (targetUuid != null) {
+                if (!targetUuid.isNullOrEmpty()) {
                     val folderId = uuidToRoomId[event.objectUuid]
                     val parentId = uuidToRoomId[targetUuid]
                     if (folderId != null && parentId != null) {
@@ -390,22 +389,19 @@ class TeleDriveRepository(
 
         // Resolve file folders and Insert/Update files
         filesMap.values.forEach { file ->
-            // Find the latest folderUuid for this file from journal
             val latestFolderUuid = allEvents.filter { it.objectUuid == file.fileUuid && (it.op == "CREATE_FILE" || it.op == "MOVE_FILE") }
                 .lastOrNull()?.let { ev ->
-                    val p = JSONObject(ev.payloadJson)
+                    val p = org.json.JSONObject(ev.payloadJson)
                     val key = if (ev.op == "CREATE_FILE") "parentFolderUuid" else "toFolderUuid"
                     if (p.isNull(key)) null else p.optString(key, "")
                 }
-
-            // Special case for copied files
             val finalFolderUuid = latestFolderUuid ?: allEvents.filter { it.objectUuid == file.fileUuid && it.op == "COPY_FILE" }
                 .lastOrNull()?.let { ev ->
-                    val p = JSONObject(ev.payloadJson)
+                    val p = org.json.JSONObject(ev.payloadJson)
                     if (p.has("toFolderUuid") && !p.isNull("toFolderUuid")) p.optString("toFolderUuid", "") else null
                 }
 
-            val localFolderId = if (finalFolderUuid != null) uuidToRoomId[finalFolderUuid] else null
+            val localFolderId = if (!finalFolderUuid.isNullOrEmpty()) uuidToRoomId[finalFolderUuid] else null
             val existing = fileDao.getFileByUuid(file.fileUuid)
             if (existing == null) {
                 if (!file.isDeleted) {

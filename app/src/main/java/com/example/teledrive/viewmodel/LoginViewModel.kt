@@ -159,9 +159,9 @@ class LoginViewModel(
 
                 repository.saveSession(
                     UserSession(
-                        telegramUserId = me.id,
+                        telegramUserId = me.id.toLong(),
                         phoneNumber = phoneNumber,
-                        username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
+                        username = me.username ?: "",
                         firstName = me.firstName ?: "",
                         lastName = me.lastName ?: "",
                         channelId = storageChannelId,

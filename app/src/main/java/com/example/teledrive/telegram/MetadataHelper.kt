@@ -86,7 +86,20 @@ object MetadataHelper {
             put("objectType", objectType)
             put("objectId", objectId)
             put("version", version)
-            put("payload", JSONObject(payload))
+
+            val payloadJson = JSONObject()
+            payload.forEach { (key, value) ->
+                when (value) {
+                    null -> payloadJson.put(key, JSONObject.NULL)
+                    is String -> payloadJson.put(key, value)
+                    is Long -> payloadJson.put(key, value)
+                    is Int -> payloadJson.put(key, value)
+                    is Boolean -> payloadJson.put(key, value)
+                    is Double -> payloadJson.put(key, value)
+                    else -> payloadJson.put(key, value.toString())
+                }
+            }
+            put("payload", payloadJson)
         }
         return "$JOURNAL_PREFIX$json"
     }

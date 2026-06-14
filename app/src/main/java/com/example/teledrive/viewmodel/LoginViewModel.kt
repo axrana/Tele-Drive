@@ -170,7 +170,7 @@ class LoginViewModel(
                         storageChannelUsername = null,
                         journalChannelId = journalChannelId,
                         journalChannelUsername = null,
-                        isPremium = me.isPremium,
+                        isPremium = false,
                         loginDate = System.currentTimeMillis()
                     )
                 )

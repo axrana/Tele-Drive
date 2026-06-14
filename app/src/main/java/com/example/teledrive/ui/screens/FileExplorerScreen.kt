@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -254,11 +255,6 @@ fun FileExplorerScreen(
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = TeleBlueContainer,
                                 selectedLabelColor = TeleBlueDark
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = folder == breadcrumb.last(),
-                                borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
                             )
                         )
                     }

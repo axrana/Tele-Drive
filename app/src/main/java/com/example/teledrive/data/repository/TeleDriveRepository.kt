@@ -183,7 +183,6 @@ class TeleDriveRepository(
 
         val query = TdApi.SendMessage()
         query.chatId = journalChannelId
-        query.replyToMessageId = 0L
         query.inputMessageContent = content
 
         val message = tdLibraryManager.execute(query)

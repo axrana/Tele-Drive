@@ -9,6 +9,7 @@ import com.example.teledrive.data.local.entity.Folder
 import com.example.teledrive.data.local.entity.ShareToken
 import com.example.teledrive.data.local.entity.UserSession
 import com.example.teledrive.telegram.MetadataHelper
+import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import org.drinkless.tdlib.TdApi
@@ -182,9 +183,22 @@ class TeleDriveRepository(
 
         val query = TdApi.SendMessage()
         query.chatId = journalChannelId
+        query.replyToMessageId = 0L
         query.inputMessageContent = content
 
         val message = tdLibraryManager.execute(query)
+        val jsonObj = JSONObject()
+        payload.forEach { (key, value) ->
+            when (value) {
+                null -> jsonObj.put(key, JSONObject.NULL)
+                is String -> jsonObj.put(key, value)
+                is Long -> jsonObj.put(key, value)
+                is Int -> jsonObj.put(key, value)
+                is Boolean -> jsonObj.put(key, value)
+                is Double -> jsonObj.put(key, value)
+                else -> jsonObj.put(key, value.toString())
+            }
+        }
         val journalEvent = com.example.teledrive.data.local.entity.JournalEvent(
             eventUuid = eventUuid,
             objectType = objectType,
@@ -193,7 +207,7 @@ class TeleDriveRepository(
             version = version,
             ts = System.currentTimeMillis(),
             telegramJournalMessageId = message.id,
-            payloadJson = payload.toString() // Simplified for now, payload is usually small
+            payloadJson = jsonObj.toString()
         )
         journalEventDao.insertEvent(journalEvent)
         return message.id
@@ -337,25 +351,33 @@ class TeleDriveRepository(
             }
         }
 
-        // 4. Resolve hierarchies and Apply to DB
-        fileDao.clearAll()
-        folderDao.clearAll()
-
-        // Insert folders first to get internal Room IDs
+        // 4. Resolve hierarchies and Apply to DB (Upsert approach)
         val uuidToRoomId = mutableMapOf<String, Long>()
-        foldersMap.values.filter { !it.isDeleted }.forEach { folder ->
-            val id = folderDao.createFolder(folder)
-            uuidToRoomId[folder.folderUuid] = id
+        foldersMap.values.forEach { folder ->
+            val existing = folderDao.getFolderByUuid(folder.folderUuid)
+            if (existing == null) {
+                if (!folder.isDeleted) {
+                    val id = folderDao.createFolder(folder)
+                    uuidToRoomId[folder.folderUuid] = id
+                }
+            } else {
+                folderDao.updateFolder(existing.copy(
+                    name = folder.name,
+                    isDeleted = folder.isDeleted,
+                    version = folder.version
+                ))
+                uuidToRoomId[folder.folderUuid] = existing.id
+            }
         }
 
         // Second pass: resolve parent relationships for folders
         allEvents.forEach { event ->
             if (event.op == "CREATE_FOLDER" || event.op == "MOVE_FOLDER") {
                 val payload = org.json.JSONObject(event.payloadJson)
-                val parentUuid = if (payload.isNull("parentId")) null else payload.getString("parentId")
-                val targetUuid = if (payload.has("toFolderUuid")) payload.getString("toFolderUuid") else parentUuid
+                val parentUuid = if (payload.isNull("parentId")) null else payload.optString("parentId", "")
+                val targetUuid = if (payload.has("toFolderUuid")) payload.optString("toFolderUuid", "") else parentUuid
 
-                if (targetUuid != null) {
+                if (!targetUuid.isNullOrEmpty()) {
                     val folderId = uuidToRoomId[event.objectUuid]
                     val parentId = uuidToRoomId[targetUuid]
                     if (folderId != null && parentId != null) {
@@ -365,31 +387,41 @@ class TeleDriveRepository(
             }
         }
 
-        // Resolve file folders and Insert files
-        filesMap.values.filter { !it.isDeleted }.forEach { file ->
-            // Find the latest folderUuid for this file from journal
+        // Resolve file folders and Insert/Update files
+        filesMap.values.forEach { file ->
             val latestFolderUuid = allEvents.filter { it.objectUuid == file.fileUuid && (it.op == "CREATE_FILE" || it.op == "MOVE_FILE") }
                 .lastOrNull()?.let { ev ->
                     val p = org.json.JSONObject(ev.payloadJson)
                     val key = if (ev.op == "CREATE_FILE") "parentFolderUuid" else "toFolderUuid"
-                    if (p.isNull(key)) null else p.getString(key)
+                    if (p.isNull(key)) null else p.optString(key, "")
                 }
-
-            // Special case for copied files - they might not have a MOVE_FILE event yet if just created
             val finalFolderUuid = latestFolderUuid ?: allEvents.filter { it.objectUuid == file.fileUuid && it.op == "COPY_FILE" }
                 .lastOrNull()?.let { ev ->
                     val p = org.json.JSONObject(ev.payloadJson)
-                    if (p.has("toFolderUuid") && !p.isNull("toFolderUuid")) p.getString("toFolderUuid") else null
+                    if (p.has("toFolderUuid") && !p.isNull("toFolderUuid")) p.optString("toFolderUuid", "") else null
                 }
 
-            val localFolderId = if (finalFolderUuid != null) uuidToRoomId[finalFolderUuid] else null
-            fileDao.createFile(file.copy(folderId = localFolderId))
+            val localFolderId = if (!finalFolderUuid.isNullOrEmpty()) uuidToRoomId[finalFolderUuid] else null
+            val existing = fileDao.getFileByUuid(file.fileUuid)
+            if (existing == null) {
+                if (!file.isDeleted) {
+                    fileDao.createFile(file.copy(folderId = localFolderId))
+                }
+            } else {
+                fileDao.updateFile(existing.copy(
+                    name = file.name,
+                    displayName = file.displayName,
+                    isDeleted = file.isDeleted,
+                    folderId = localFolderId,
+                    version = file.version
+                ))
+            }
         }
 
         // 5. Cleanup
         // Handle Recovered bucket for orphaned storage messages not in journal
         val storageInJournal = allEvents.filter { it.objectType == "file" && (it.op == "CREATE_FILE" || it.op == "COPY_FILE") }
-            .map { org.json.JSONObject(it.payloadJson).getLong("storageMessageId") }
+            .map { JSONObject(it.payloadJson).optLong("storageMessageId", 0L) }
             .toSet()
 
         val orphans = storageMap.keys - storageInJournal

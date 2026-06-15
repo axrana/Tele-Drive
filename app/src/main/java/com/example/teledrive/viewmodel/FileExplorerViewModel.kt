@@ -217,7 +217,7 @@ class FileExplorerViewModel(
                     )
                 }
 
-                repository.createFolder(name, currentParentId, 0L, parentFolder?.telegramThreadMsgId)
+                repository.createFolder(name, currentParentId, 0L, parentFolder?.telegramThreadMsgId, folderUuid)
                 _errorFlow.emit("Folder '$name' created")
             } catch (e: Exception) {
                 com.example.teledrive.util.TeleDriveLogger.e("CreateFolder", "Failed", e)

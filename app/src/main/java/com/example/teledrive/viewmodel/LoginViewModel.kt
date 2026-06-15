@@ -159,7 +159,7 @@ class LoginViewModel(
 
                 repository.saveSession(
                     UserSession(
-                        telegramUserId = me.id.toLong(),
+                        telegramUserId = me.id,
                         phoneNumber = phoneNumber,
                         username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
                         firstName = me.firstName ?: "",
@@ -170,7 +170,7 @@ class LoginViewModel(
                         storageChannelUsername = null,
                         journalChannelId = journalChannelId,
                         journalChannelUsername = null,
-                        isPremium = false,
+                        isPremium = me.isPremium,
                         loginDate = System.currentTimeMillis()
                     )
                 )

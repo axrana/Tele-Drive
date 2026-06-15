@@ -13,7 +13,6 @@ import com.example.teledrive.data.local.entity.FileEntity
 import com.example.teledrive.data.repository.TeleDriveRepository
 import com.example.teledrive.tdlib.TdLibraryManager
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import org.drinkless.tdlib.TdApi
@@ -46,8 +45,6 @@ class UploadWorker(
 
     override suspend fun doWork(): Result = coroutineScope {
         val path = inputData.getString("filepath") ?: return@coroutineScope Result.failure()
-        val currentSession = repository.getUserSession().firstOrNull() ?: return@coroutineScope Result.failure()
-        if (currentSession.storageChannelId == 0L) return@coroutineScope Result.failure()
         val folderId = inputData.getLong("folderid", -1L)
         val file = File(path)
         if (!file.exists()) return@coroutineScope Result.failure()
@@ -55,7 +52,8 @@ class UploadWorker(
         setForeground(createForegroundInfo(file.name, 0))
 
         try {
-            // session obtained
+            val session = repository.getUserSession().firstOrNull()
+                ?: return@coroutineScope Result.failure()
 
             val progressJob = launch {
                 tdLibraryManager.fileUpdates.collect { tdFile ->
@@ -87,22 +85,10 @@ class UploadWorker(
             inputMessage.caption = formattedCaption
 
             val query = TdApi.SendMessage()
-            query.chatId = currentSession.storageChannelId
-            val replyTo = TdApi.InputMessageReplyToMessage()
-            replyTo.messageId = 0L
-            query.replyTo = replyTo
+            query.chatId = session.storageChannelId
             query.inputMessageContent = inputMessage
 
-            var message = tdLibraryManager.execute(query)
-            var finalAttempts = 0
-            while (message.sendingState != null && finalAttempts < 20) {
-                delay(500)
-                val getMsgQuery = TdApi.GetMessage()
-                getMsgQuery.chatId = message.chatId
-                getMsgQuery.messageId = message.id
-                message = tdLibraryManager.execute(getMsgQuery)
-                finalAttempts += 1
-            }
+            val message = tdLibraryManager.execute(query)
 
             progressJob.cancel()
 
@@ -113,25 +99,21 @@ class UploadWorker(
                 val fileUuid = java.util.UUID.randomUUID().toString()
                 val parentFolder = if (folderId != -1L) repository.getFolderById(folderId) else null
 
-                if (currentSession.journalChannelId != 0L) {
-                    val remoteIdActual = (message.content as? TdApi.MessageDocument)?.document?.document?.remote?.id
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = currentSession.journalChannelId,
-                        op = "CREATE_FILE",
-                        objectType = "file",
-                        objectId = fileUuid,
-                        version = 1,
-                        payload = mapOf(
-                            "name" to file.name,
-                            "size" to file.length(),
-                            "mimeType" to docContent.document.mimeType,
-                            "storageMessageId" to message.id,
-                            "remoteFileId" to remoteIdActual,
-                            "parentFolderUuid" to parentFolder?.folderUuid
-                        )
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "CREATE_FILE",
+                    objectType = "file",
+                    objectId = fileUuid,
+                    version = 1,
+                    payload = mapOf(
+                        "name" to file.name,
+                        "size" to file.length(),
+                        "mimeType" to docContent.document.mimeType,
+                        "storageMessageId" to message.id,
+                        "parentFolderUuid" to parentFolder?.folderUuid
                     )
-                }
+                )
 
                 repository.createFile(
                     FileEntity(

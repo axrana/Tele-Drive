@@ -151,17 +151,15 @@ class FileExplorerViewModel(
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
                 val targetFolder = newFolderId?.let { repository.getFolderById(it) }
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "MOVE_FILE",
-                        objectType = "file",
-                        objectId = file.fileUuid,
-                        version = file.version + 1,
-                        payload = mapOf("toFolderUuid" to targetFolder?.folderUuid)
-                    )
-                }
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "MOVE_FILE",
+                    objectType = "file",
+                    objectId = file.fileUuid,
+                    version = file.version + 1,
+                    payload = mapOf("toFolderUuid" to targetFolder?.folderUuid)
+                )
 
                 repository.moveFile(file.copy(folderId = newFolderId, version = file.version + 1))
                 _errorFlow.emit("File moved")
@@ -198,26 +196,27 @@ class FileExplorerViewModel(
         viewModelScope.launch {
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
-
+                if (session.journalChannelId == 0L) {
+                    _errorFlow.emit("Journal channel not set. Check settings.")
+                    return@launch
+                }
 
                 val currentParentId = _currentFolderId.value
                 val parentFolder = currentParentId?.let { repository.getFolderById(it) }
                 val parentUuid = parentFolder?.folderUuid
                 val folderUuid = java.util.UUID.randomUUID().toString()
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "CREATE_FOLDER",
-                        objectType = "folder",
-                        objectId = folderUuid,
-                        version = 1,
-                        payload = mapOf("name" to name, "parentId" to parentUuid)
-                    )
-                }
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "CREATE_FOLDER",
+                    objectType = "folder",
+                    objectId = folderUuid,
+                    version = 1,
+                    payload = mapOf("name" to name, "parentId" to parentUuid)
+                )
 
-                repository.createFolder(name, currentParentId, 0L, parentFolder?.telegramThreadMsgId, folderUuid)
+                repository.createFolder(name, currentParentId, 0L, parentFolder?.telegramThreadMsgId)
                 _errorFlow.emit("Folder '$name' created")
             } catch (e: Exception) {
                 com.example.teledrive.util.TeleDriveLogger.e("CreateFolder", "Failed", e)
@@ -342,17 +341,15 @@ class FileExplorerViewModel(
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "DELETE_FILE",
-                        objectType = "file",
-                        objectId = file.fileUuid,
-                        version = file.version + 1,
-                        payload = emptyMap()
-                    )
-                }
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "DELETE_FILE",
+                    objectType = "file",
+                    objectId = file.fileUuid,
+                    version = file.version + 1,
+                    payload = emptyMap()
+                )
 
                 repository.deleteFileFromTelegram(tdLibraryManager, session.storageChannelId, file.storageMessageId)
                 repository.deleteFile(file.copy(isDeleted = true, version = file.version + 1))
@@ -367,17 +364,15 @@ class FileExplorerViewModel(
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "RENAME_FILE",
-                        objectType = "file",
-                        objectId = file.fileUuid,
-                        version = file.version + 1,
-                        payload = mapOf("name" to newName)
-                    )
-                }
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "RENAME_FILE",
+                    objectType = "file",
+                    objectId = file.fileUuid,
+                    version = file.version + 1,
+                    payload = mapOf("name" to newName)
+                )
 
                 repository.renameFile(file.copy(name = newName, displayName = newName, version = file.version + 1))
             } catch (e: Exception) {
@@ -408,17 +403,15 @@ class FileExplorerViewModel(
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
                 val targetFolder = newParentId?.let { repository.getFolderById(it) }
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "MOVE_FOLDER",
-                        objectType = "folder",
-                        objectId = folder.folderUuid,
-                        version = folder.version + 1,
-                        payload = mapOf("toFolderUuid" to targetFolder?.folderUuid)
-                    )
-                }
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "MOVE_FOLDER",
+                    objectType = "folder",
+                    objectId = folder.folderUuid,
+                    version = folder.version + 1,
+                    payload = mapOf("toFolderUuid" to targetFolder?.folderUuid)
+                )
 
                 repository.moveFolder(folder.copy(parentFolderId = newParentId, version = folder.version + 1))
                 _errorFlow.emit("Folder moved")
@@ -433,17 +426,15 @@ class FileExplorerViewModel(
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "RENAME_FOLDER",
-                        objectType = "folder",
-                        objectId = folder.folderUuid,
-                        version = folder.version + 1,
-                        payload = mapOf("name" to newName)
-                    )
-                }
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "RENAME_FOLDER",
+                    objectType = "folder",
+                    objectId = folder.folderUuid,
+                    version = folder.version + 1,
+                    payload = mapOf("name" to newName)
+                )
 
                 repository.renameFolder(folder.copy(name = newName, version = folder.version + 1))
             } catch (e: Exception) {
@@ -457,17 +448,15 @@ class FileExplorerViewModel(
             try {
                 val session = repository.getUserSession().firstOrNull() ?: return@launch
 
-                if (session.journalChannelId != 0L) {
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = session.journalChannelId,
-                        op = "DELETE_FOLDER",
-                        objectType = "folder",
-                        objectId = folder.folderUuid,
-                        version = folder.version + 1,
-                        payload = emptyMap()
-                    )
-                }
+                repository.appendJournalEvent(
+                    tdLibraryManager = tdLibraryManager,
+                    journalChannelId = session.journalChannelId,
+                    op = "DELETE_FOLDER",
+                    objectType = "folder",
+                    objectId = folder.folderUuid,
+                    version = folder.version + 1,
+                    payload = emptyMap()
+                )
 
                 repository.deleteFolderWithContents(tdLibraryManager, session.storageChannelId, folder.copy(isDeleted = true, version = folder.version + 1))
             } catch (e: Exception) {

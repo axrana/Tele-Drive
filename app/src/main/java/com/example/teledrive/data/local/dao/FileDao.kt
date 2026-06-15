@@ -48,6 +48,9 @@ interface FileDao {
     @Query("SELECT COUNT(*) FROM files WHERE isDeleted = 0")
     fun getFileCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM files WHERE storageMessageId = :storageMessageId AND isDeleted = 0 AND id != :excludeId")
+    suspend fun countFilesWithStorageMessage(storageMessageId: Long, excludeId: Long): Int
+
     @Query("SELECT * FROM files WHERE folderId = :folderId")
     suspend fun getFilesInFolderSync(folderId: Long?): List<FileEntity>
 

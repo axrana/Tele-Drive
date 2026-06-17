@@ -254,11 +254,6 @@ fun FileExplorerScreen(
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = TeleBlueContainer,
                                 selectedLabelColor = TeleBlueDark
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = folder == breadcrumb.last(),
-                                borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
                             )
                         )
                     }
@@ -852,7 +847,7 @@ fun ItemContextMenu(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ContextMenuItem(icon: ImageVector, label: String, tint: Color = LocalContentColor.current, onClick: () -> Unit) {
+fun ContextMenuItem(icon: ImageVector, label: String, tint: Color = androidx.compose.material3.LocalContentColor.current, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(label, color = tint) },
         leadingContent = { Icon(icon, contentDescription = null, tint = tint) },

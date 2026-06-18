@@ -98,7 +98,6 @@ class TeleDriveRepository(
     suspend fun deleteFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun countFilesWithStorageMessage(storageMessageId: Long, excludeId: Long): Int =
         fileDao.countFilesWithStorageMessage(storageMessageId, excludeId)
-
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
     fun getFileCount(): Flow<Int> = fileDao.getFileCount()
     fun getFolderCount(): Flow<Int> = folderDao.getFolderCount()

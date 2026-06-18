@@ -354,7 +354,10 @@ class FileExplorerViewModel(
                     )
                 }
 
-                repository.deleteFileFromTelegram(tdLibraryManager, session.storageChannelId, file.storageMessageId)
+                val siblingCount = repository.countFilesWithStorageMessage(file.storageMessageId, file.id)
+                if (siblingCount == 0 && file.storageMessageId != 0L) {
+                    repository.deleteFileFromTelegram(tdLibraryManager, session.storageChannelId, file.storageMessageId)
+                }
                 repository.deleteFile(file.copy(isDeleted = true, version = file.version + 1))
             } catch (e: Exception) {
                 _errorFlow.emit("Delete failed: ${e.message}")

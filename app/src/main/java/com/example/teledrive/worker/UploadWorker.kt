@@ -108,7 +108,7 @@ class UploadWorker(
 
             val docContent = message.content as TdApi.MessageDocument
             val remoteId = docContent.document.document.remote.id
-            val existing = repository.getFileByTelegramFileId(remoteId)
+            val existing = repository.getFileByTelegramMsgId(message.id)
             if (existing == null) {
                 val fileUuid = java.util.UUID.randomUUID().toString()
                 val parentFolder = if (folderId != -1L) repository.getFolderById(folderId) else null

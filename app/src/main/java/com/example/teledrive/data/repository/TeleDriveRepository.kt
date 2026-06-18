@@ -52,6 +52,7 @@ class TeleDriveRepository(
     suspend fun getFileById(id: Long) = fileDao.getFileById(id)
     suspend fun getFileByUuid(uuid: String) = fileDao.getFileByUuid(uuid)
     suspend fun getFileByTelegramFileId(telegramFileId: String) = fileDao.getFileByTelegramFileId(telegramFileId)
+    suspend fun getFileByTelegramMsgId(msgId: Long) = fileDao.getFileByTelegramMsgId(msgId)
     suspend fun updateFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun renameFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun moveFile(file: FileEntity) = fileDao.updateFile(file)
@@ -95,6 +96,8 @@ class TeleDriveRepository(
         fileDao.createFile(copy)
     }
     suspend fun deleteFile(file: FileEntity) = fileDao.updateFile(file)
+    suspend fun countFilesWithStorageMessage(storageMessageId: Long, excludeId: Long): Int =
+        fileDao.countFilesWithStorageMessage(storageMessageId, excludeId)
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
     fun getFileCount(): Flow<Int> = fileDao.getFileCount()
     fun getFolderCount(): Flow<Int> = folderDao.getFolderCount()
@@ -417,16 +420,18 @@ class TeleDriveRepository(
             .map { JSONObject(it.payloadJson).optLong("storageMessageId", 0L) }
             .toSet()
 
-        val orphans = storageMap.keys - storageInJournal
-        if (orphans.isNotEmpty()) {
+        val orphanIds = storageMap.keys - storageInJournal
+        if (orphanIds.isNotEmpty()) {
             val recoveredId = folderDao.createFolder(Folder(
-                folderUuid = "recovered",
+                folderUuid = "__recovered__",
                 name = "Recovered",
                 createdDate = System.currentTimeMillis(),
                 telegramThreadMsgId = -1
             ))
-            orphans.forEach { msgId ->
-                val msg = storageMap[msgId]!!
+            orphanIds.forEach { msgId ->
+                val msg = storageMap[msgId] ?: return@forEach
+                val existingFile = fileDao.getFileByTelegramMsgId(msgId)
+                if (existingFile != null) return@forEach
                 val doc = (msg.content as TdApi.MessageDocument).document
                 fileDao.createFile(FileEntity(
                     fileUuid = java.util.UUID.randomUUID().toString(),

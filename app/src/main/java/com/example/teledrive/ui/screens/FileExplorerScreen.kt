@@ -4,6 +4,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -74,6 +75,11 @@ fun FileExplorerScreen(
     var showMoveDialog by remember { mutableStateOf<Any?>(null) }
     var renameInput by remember { mutableStateOf("") }
     var showFab by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = breadcrumb.isNotEmpty()) {
+        val parent = if (breadcrumb.size > 1) breadcrumb[breadcrumb.size - 2] else null
+        viewModel.navigateToFolder(parent)
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let { selectedUri ->

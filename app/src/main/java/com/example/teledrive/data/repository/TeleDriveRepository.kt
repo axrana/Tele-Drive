@@ -414,42 +414,62 @@ class TeleDriveRepository(
             }
         }
 
-        // 5. Cleanup
-        // Handle Recovered bucket for orphaned storage messages not in journal
-        val storageInJournal = allEvents.filter { it.objectType == "file" && (it.op == "CREATE_FILE" || it.op == "COPY_FILE") }
-            .map { JSONObject(it.payloadJson).optLong("storageMessageId", 0L) }
-            .toSet()
+        // 5. Cleanup: handle truly orphaned storage messages (not in journal even now)
+val storageInJournal = allEvents.filter { it.objectType == "file" && (it.op == "CREATE_FILE" || it.op == "COPY_FILE") }
+    .mapNotNull { event ->
+        try { JSONObject(event.payloadJson).optLong("storageMessageId", 0L).takeIf { it != 0L } }
+        catch (e: Exception) { null }
+    }.toSet()
 
-        val orphanIds = storageMap.keys - storageInJournal
-        if (orphanIds.isNotEmpty()) {
-            val recoveredId = folderDao.createFolder(Folder(
-                folderUuid = "__recovered__",
-                name = "Recovered",
-                createdDate = System.currentTimeMillis(),
-                telegramThreadMsgId = -1
-            ))
-            orphanIds.forEach { msgId ->
-                val msg = storageMap[msgId] ?: return@forEach
-                val existingFile = fileDao.getFileByTelegramMsgId(msgId)
-                if (existingFile != null) return@forEach
-                val doc = (msg.content as TdApi.MessageDocument).document
-                fileDao.createFile(FileEntity(
-                    fileUuid = java.util.UUID.randomUUID().toString(),
-                    name = doc.fileName ?: "orphan_$msgId",
-                    displayName = doc.fileName ?: "orphan_$msgId",
-                    size = doc.document.size,
-                    mimeType = doc.mimeType,
-                    extension = doc.fileName?.substringAfterLast('.', ""),
-                    telegramMsgId = msgId,
-                    storageMessageId = msgId,
-                    telegramFileId = doc.document.remote.id,
-                    folderId = recoveredId,
-                    uploadDate = msg.date.toLong() * 1000
-                ))
-            }
+val orphanIds = storageMap.keys.filter { it !in storageInJournal }
+
+// IMPORTANT: if a file was previously dumped into Recovered but its journal
+// event has now arrived, remove the stale Recovered duplicate.
+val recoveredFolder = folderDao.getFolderByUuid("__recovered__")
+if (recoveredFolder != null) {
+    storageInJournal.forEach { msgId ->
+        val staleRecoveredFile = fileDao.getFileByTelegramMsgId(msgId)
+        if (staleRecoveredFile != null && staleRecoveredFile.folderId == recoveredFolder.id) {
+            // This file is now properly tracked by the journal elsewhere in filesMap loop above,
+            // so delete the stale Recovered copy to avoid duplication.
+            fileDao.deleteFile(staleRecoveredFile)
         }
     }
+}
 
+if (orphanIds.isNotEmpty()) {
+    val existingRecovered = folderDao.getFolderByUuid("__recovered__")
+    val recoveredId = existingRecovered?.id ?: folderDao.createFolder(
+        Folder(
+            folderUuid = "__recovered__",
+            name = "Recovered",
+            createdDate = System.currentTimeMillis(),
+            telegramThreadMsgId = -1L
+        )
+    )
+
+    orphanIds.forEach { msgId ->
+        val msg = storageMap[msgId] ?: return@forEach
+        val existingFile = fileDao.getFileByTelegramMsgId(msgId)
+        if (existingFile != null) return@forEach
+        val doc = (msg.content as? TdApi.MessageDocument)?.document ?: return@forEach
+        fileDao.createFile(
+            FileEntity(
+                fileUuid = java.util.UUID.randomUUID().toString(),
+                name = doc.fileName ?: "orphan_$msgId",
+                displayName = doc.fileName ?: "orphan_$msgId",
+                size = doc.document.size,
+                mimeType = doc.mimeType,
+                extension = doc.fileName?.substringAfterLast('.', ""),
+                telegramMsgId = msgId,
+                storageMessageId = msgId,
+                telegramFileId = doc.document.remote.id,
+                folderId = recoveredId,
+                uploadDate = msg.date.toLong() * 1000
+            )
+        )
+    }
+}
     private suspend fun fetchAllMessages(
         tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
         chatId: Long

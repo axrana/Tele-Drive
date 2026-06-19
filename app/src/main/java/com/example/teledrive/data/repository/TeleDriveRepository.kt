@@ -470,6 +470,8 @@ if (orphanIds.isNotEmpty()) {
         )
     }
 }
+}
+
     private suspend fun fetchAllMessages(
         tdLibraryManager: com.example.teledrive.tdlib.TdLibraryManager,
         chatId: Long

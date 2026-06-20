@@ -95,18 +95,24 @@ class UploadWorker(
 
             var message = tdLibraryManager.execute(query)
             var finalAttempts = 0
-            while (message.sendingState != null && finalAttempts < 20) {
-                delay(500)
+            while (finalAttempts < 60) {
+                delay(1000)
                 val getMsgQuery = TdApi.GetMessage()
                 getMsgQuery.chatId = message.chatId
                 getMsgQuery.messageId = message.id
                 message = tdLibraryManager.execute(getMsgQuery)
-                finalAttempts += 1
+
+                val doc = (message.content as? TdApi.MessageDocument)?.document
+                if (message.sendingState == null && doc != null && doc.document.remote.isUploadingCompleted) {
+                    break
+                }
+                finalAttempts++
             }
 
             progressJob.cancel()
 
-            val docContent = message.content as TdApi.MessageDocument
+            val docContent = message.content as? TdApi.MessageDocument
+                ?: return@coroutineScope Result.failure()
             val remoteId = docContent.document.document.remote.id
             val existing = repository.getFileByTelegramMsgId(message.id)
             if (existing == null) {

@@ -98,6 +98,7 @@ class TeleDriveRepository(
     suspend fun deleteFile(file: FileEntity) = fileDao.updateFile(file)
     suspend fun countFilesWithStorageMessage(storageMessageId: Long, excludeId: Long): Int =
         fileDao.countFilesWithStorageMessage(storageMessageId, excludeId)
+
     fun getTotalStorageUsed(): Flow<Long?> = fileDao.getTotalStorageUsed()
     fun getFileCount(): Flow<Int> = fileDao.getFileCount()
     fun getFolderCount(): Flow<Int> = folderDao.getFolderCount()
@@ -430,6 +431,12 @@ class TeleDriveRepository(
             ))
             orphanIds.forEach { msgId ->
                 val msg = storageMap[msgId] ?: return@forEach
+                val isActuallyJournaled = allEvents.any {
+                    (it.op == "CREATE_FILE" || it.op == "COPY_FILE") &&
+                    JSONObject(it.payloadJson).optLong("storageMessageId", -1L) == msgId
+                }
+                if (isActuallyJournaled) return@forEach
+
                 val existingFile = fileDao.getFileByTelegramMsgId(msgId)
                 if (existingFile != null) return@forEach
                 val doc = (msg.content as TdApi.MessageDocument).document

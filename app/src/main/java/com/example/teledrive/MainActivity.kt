@@ -106,8 +106,9 @@ class MainActivity : ComponentActivity() {
                     composable("settings") {
                         val scope = rememberCoroutineScope()
                         SettingsScreen(
-                            settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
-                            channelId = userSession?.channelId,
+    settings = persistentSettings ?: com.example.teledrive.data.local.entity.Settings(),
+    channelId = userSession?.storageChannelId,
+    journalChannelId = userSession?.journalChannelId,
                             onSettingsChange = { newSettings ->
                                 scope.launch {
                                     repository.saveSettings(newSettings)

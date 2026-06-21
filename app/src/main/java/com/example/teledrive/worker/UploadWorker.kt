@@ -45,16 +45,34 @@ class UploadWorker(
     }
 
     override suspend fun doWork(): Result = coroutineScope {
-        val path = inputData.getString("filepath") ?: return@coroutineScope Result.failure()
-        val currentSession = repository.getUserSession().firstOrNull() ?: return@coroutineScope Result.failure()
-        if (currentSession.storageChannelId == 0L) return@coroutineScope Result.failure()
-        val folderId = inputData.getLong("folderid", -1L)
-        val file = File(path)
-        if (!file.exists()) return@coroutineScope Result.failure()
+    val path = inputData.getString("filepath") ?: return@coroutineScope Result.failure()
+    val currentSession = repository.getUserSession().firstOrNull() ?: return@coroutineScope Result.failure()
+    if (currentSession.storageChannelId == 0L) return@coroutineScope Result.failure()
+    val folderId = inputData.getLong("folderid", -1L)
+    val file = File(path)
+    if (!file.exists()) return@coroutineScope Result.failure()
 
-        setForeground(createForegroundInfo(file.name, 0))
+    setForeground(createForegroundInfo(file.name, 0))
 
-        try {
+    // Ensure TDLib has both chats loaded locally before sending anything.
+    // Without this, SendMessage/GetMessage can intermittently fail with
+    // "404: Not Found" if the chat hasn't been hydrated into TDLib's cache yet.
+    try {
+        val getStorageChat = TdApi.GetChat()
+        getStorageChat.chatId = currentSession.storageChannelId
+        tdLibraryManager.execute(getStorageChat)
+
+        if (currentSession.journalChannelId != 0L) {
+            val getJournalChat = TdApi.GetChat()
+            getJournalChat.chatId = currentSession.journalChannelId
+            tdLibraryManager.execute(getJournalChat)
+        }
+    } catch (e: Exception) {
+        // If even GetChat fails, the upload would fail anyway - let it proceed
+        // and surface the real error below rather than masking it here.
+    }
+
+    try {
             // session obtained
 
             val progressJob = launch {

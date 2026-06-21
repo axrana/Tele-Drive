@@ -136,48 +136,68 @@ progressJob.cancel()
 val docContent = message.content as? TdApi.MessageDocument
     ?: return@coroutineScope Result.failure()
 val remoteId = docContent.document.document.remote.id
-            val existing = repository.getFileByTelegramMsgId(message.id)
-            if (existing == null) {
-                val fileUuid = java.util.UUID.randomUUID().toString()
-                val parentFolder = parentFolderForJournal
 
-                if (currentSession.journalChannelId != 0L) {
-                    val remoteIdActual = (message.content as? TdApi.MessageDocument)?.document?.document?.remote?.id
-                    repository.appendJournalEvent(
-                        tdLibraryManager = tdLibraryManager,
-                        journalChannelId = currentSession.journalChannelId,
-                        op = "CREATE_FILE",
-                        objectType = "file",
-                        objectId = fileUuid,
-                        version = 1,
-                        payload = mapOf(
-                            "name" to file.name,
-                            "size" to file.length(),
-                            "mimeType" to docContent.document.mimeType,
-                            "storageMessageId" to message.id,
-                            "remoteFileId" to remoteIdActual,
-                            "parentFolderUuid" to parentFolder?.folderUuid
-                        )
-                    )
-                }
+tdLibraryManager.errorFlow.emit("DEBUG1: message.id=${message.id} journalChannelId=${currentSession.journalChannelId}")
 
-                repository.createFile(
-                    FileEntity(
-                        fileUuid = fileUuid,
-                        name = file.name,
-                        displayName = file.name,
-                        size = file.length(),
-                        mimeType = docContent.document.mimeType,
-                        extension = file.extension,
-                        telegramMsgId = message.id,
-                        storageMessageId = message.id,
-                        telegramFileId = remoteId,
-                        folderId = if (folderId == -1L) null else folderId,
-                        uploadDate = System.currentTimeMillis()
-                    )
+val existing = repository.getFileByTelegramMsgId(message.id)
+tdLibraryManager.errorFlow.emit("DEBUG2: existing=${existing != null}")
+
+if (existing == null) {
+    val fileUuid = java.util.UUID.randomUUID().toString()
+    val parentFolder = parentFolderForJournal
+
+    if (currentSession.journalChannelId != 0L) {
+        tdLibraryManager.errorFlow.emit("DEBUG3: entering journal write block")
+        val remoteIdActual = (message.content as? TdApi.MessageDocument)?.document?.document?.remote?.id
+        try {
+            val journalMsgId = repository.appendJournalEvent(
+                tdLibraryManager = tdLibraryManager,
+                journalChannelId = currentSession.journalChannelId,
+                op = "CREATE_FILE",
+                objectType = "file",
+                objectId = fileUuid,
+                version = 1,
+                payload = mapOf(
+                    "name" to file.name,
+                    "size" to file.length(),
+                    "mimeType" to docContent.document.mimeType,
+                    "storageMessageId" to message.id,
+                    "remoteFileId" to remoteIdActual,
+                    "parentFolderUuid" to parentFolder?.folderUuid
                 )
-            }
-            Result.success()
+            )
+            tdLibraryManager.errorFlow.emit("DEBUG4: journal write SUCCEEDED, journalMsgId=$journalMsgId")
+        } catch (e: Exception) {
+            tdLibraryManager.errorFlow.emit("DEBUG4: journal write FAILED: ${e.javaClass.simpleName}: ${e.message}")
+        }
+    } else {
+        tdLibraryManager.errorFlow.emit("DEBUG3: SKIPPED - journalChannelId is 0")
+    }
+
+    try {
+        repository.createFile(
+            FileEntity(
+                fileUuid = fileUuid,
+                name = file.name,
+                displayName = file.name,
+                size = file.length(),
+                mimeType = docContent.document.mimeType,
+                extension = file.extension,
+                telegramMsgId = message.id,
+                storageMessageId = message.id,
+                telegramFileId = remoteId,
+                folderId = if (folderId == -1L) null else folderId,
+                uploadDate = System.currentTimeMillis()
+            )
+        )
+        tdLibraryManager.errorFlow.emit("DEBUG5: createFile SUCCEEDED")
+    } catch (e: Exception) {
+        tdLibraryManager.errorFlow.emit("DEBUG5: createFile FAILED: ${e.javaClass.simpleName}: ${e.message}")
+    }
+} else {
+    tdLibraryManager.errorFlow.emit("DEBUG: file already exists, skipping (this is the bug if unexpected!)")
+}
+Result.success()
         } catch (e: Exception) {
             tdLibraryManager.errorFlow.emit("Upload failed for ${file.name}: ${e.message}")
             if (runAttemptCount < 3) Result.retry() else Result.failure()

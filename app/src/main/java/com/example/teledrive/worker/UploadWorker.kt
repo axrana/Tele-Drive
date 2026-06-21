@@ -101,17 +101,15 @@ val captionText = if (folderId != -1L) {
 
             var message = tdLibraryManager.execute(query)
 var finalAttempts = 0
-while (finalAttempts < 60) {
-    delay(1000)
+// Only wait for the MESSAGE to finish sending (sendingState == null).
+// Do NOT wait on isUploadingCompleted - that flag is unreliable on this TDLib build
+// and can stay false indefinitely even after the file is fully usable.
+while (message.sendingState != null && finalAttempts < 15) {
+    delay(500)
     val getMsgQuery = TdApi.GetMessage()
     getMsgQuery.chatId = message.chatId
     getMsgQuery.messageId = message.id
     message = tdLibraryManager.execute(getMsgQuery)
-
-    val doc = (message.content as? TdApi.MessageDocument)?.document
-    if (message.sendingState == null && doc != null && doc.document.remote.isUploadingCompleted) {
-        break
-    }
     finalAttempts += 1
 }
 

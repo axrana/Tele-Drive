@@ -110,6 +110,10 @@ fun SettingsScreen(
 
             // About section
             SettingsSectionHeader("About")
+            SettingsInfoItem(icon = Icons.Default.Storage, iconTint = ColorImage, title = "Storage Channel ID", value = channelId?.toString() ?: "N/A")
+SettingsDivider()
+SettingsInfoItem(icon = Icons.Default.MenuBook, iconTint = ColorVideo, title = "Journal Channel ID", value = journalChannelId?.toString() ?: "N/A")
+SettingsDivider()
             SettingsInfoItem(icon = Icons.Default.Info, iconTint = TeleBlueLight, title = "App Version", value = "1.2.0")
             SettingsDivider()
             SettingsInfoItem(icon = Icons.Default.Storage, iconTint = ColorArchive, title = "Storage Limit", value = "50 GB (Telegram)")

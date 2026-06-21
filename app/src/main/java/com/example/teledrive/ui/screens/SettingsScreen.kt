@@ -28,6 +28,7 @@ import com.example.teledrive.ui.theme.*
 fun SettingsScreen(
     settings: Settings,
     channelId: Long?,
+    journalChannelId: Long? = null,
     onSettingsChange: (Settings) -> Unit,
     onLogout: () -> Unit,
     onBack: () -> Unit

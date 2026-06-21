@@ -68,13 +68,19 @@ class UploadWorker(
                 }
             }
 
-            val captionText = if (folderId != -1L) {
-                val folder = repository.getFolderById(folderId)
-                val folderKey = folder?.telegramThreadMsgId ?: folderId
-                "TeleDriveFolder:$folderKey ${file.name}"
-            } else {
-                file.name
-            }
+            var parentFolderForJournal: com.example.teledrive.data.local.entity.Folder? = null
+val captionText = if (folderId != -1L) {
+    parentFolderForJournal = try {
+        repository.getFolderById(folderId)
+    } catch (e: Exception) {
+        tdLibraryManager.errorFlow.emit("Folder lookup failed: ${e.message}")
+        null
+    }
+    val folderKey = parentFolderForJournal?.telegramThreadMsgId ?: folderId
+    "TeleDriveFolder:$folderKey ${file.name}"
+} else {
+    file.name
+}
 
             val formattedCaption = TdApi.FormattedText()
             formattedCaption.text = captionText
@@ -117,7 +123,7 @@ val remoteId = docContent.document.document.remote.id
             val existing = repository.getFileByTelegramMsgId(message.id)
             if (existing == null) {
                 val fileUuid = java.util.UUID.randomUUID().toString()
-                val parentFolder = if (folderId != -1L) repository.getFolderById(folderId) else null
+                val parentFolder = parentFolderForJournal
 
                 if (currentSession.journalChannelId != 0L) {
                     val remoteIdActual = (message.content as? TdApi.MessageDocument)?.document?.document?.remote?.id

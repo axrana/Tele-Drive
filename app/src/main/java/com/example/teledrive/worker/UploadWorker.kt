@@ -58,7 +58,14 @@ class UploadWorker(
     // Without this, SendMessage/GetMessage can intermittently fail with
     // "404: Not Found" if the chat hasn't been hydrated into TDLib's cache yet.
     try {
-        val getStorageChat = TdApi.GetChat()
+    val onlineOption = TdApi.SetOption()
+    onlineOption.name = "online"
+    val onlineValue = TdApi.OptionValueBoolean()
+    onlineValue.value = true
+    onlineOption.value = onlineValue
+    tdLibraryManager.send(onlineOption)
+
+    val getStorageChat = TdApi.GetChat()
         getStorageChat.chatId = currentSession.storageChannelId
         tdLibraryManager.execute(getStorageChat)
 

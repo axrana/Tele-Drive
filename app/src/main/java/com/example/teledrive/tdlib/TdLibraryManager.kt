@@ -24,18 +24,33 @@ class TdLibraryManager(private val context: Context) {
     init { initializeClient() }
 
     @Synchronized
-    private fun initializeClient() {
-        if (client != null) return
-        client = Client.create({ obj ->
-            scope.launch { updateFlow.emit(obj) }
-            if (obj is TdApi.UpdateAuthorizationState) {
-                _authorizationState.value = obj.authorizationState
-                handleAuthorizationState(obj.authorizationState)
-            } else if (obj is TdApi.UpdateFile) {
-                scope.launch { fileUpdates.emit(obj.file) }
+private fun initializeClient() {
+    if (client != null) return
+    client = Client.create({ obj ->
+        scope.launch { updateFlow.emit(obj) }
+        if (obj is TdApi.UpdateAuthorizationState) {
+            _authorizationState.value = obj.authorizationState
+            handleAuthorizationState(obj.authorizationState)
+            if (obj.authorizationState is TdApi.AuthorizationStateReady) {
+                setOnline()
             }
-        }, null, null)
-    }
+        } else if (obj is TdApi.UpdateFile) {
+            scope.launch { fileUpdates.emit(obj.file) }
+        } else if (obj is TdApi.UpdateConnectionState) {
+            // Connection state changed (e.g. reconnecting) - re-assert online status
+            scope.launch { setOnline() }
+        }
+    }, null, null)
+}
+
+private fun setOnline() {
+    val option = TdApi.SetOption()
+    option.name = "online"
+    val value = TdApi.OptionValueBoolean()
+    value.value = true
+    option.value = value
+    send(option)
+}
 
     private fun handleAuthorizationState(state: TdApi.AuthorizationState) {
         if (state is TdApi.AuthorizationStateWaitTdlibParameters) {

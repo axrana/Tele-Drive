@@ -58,21 +58,47 @@ class UploadWorker(
     // Without this, SendMessage/GetMessage can intermittently fail with
     // "404: Not Found" if the chat hasn't been hydrated into TDLib's cache yet.
     try {
-    val onlineOption = TdApi.SetOption()
-    onlineOption.name = "online"
-    val onlineValue = TdApi.OptionValueBoolean()
-    onlineValue.value = true
-    onlineOption.value = onlineValue
-    tdLibraryManager.send(onlineOption)
+        val onlineOption = TdApi.SetOption()
+        onlineOption.name = "online"
+        val onlineValue = TdApi.OptionValueBoolean()
+        onlineValue.value = true
+        onlineOption.value = onlineValue
+        tdLibraryManager.send(onlineOption)
 
-    val getStorageChat = TdApi.GetChat()
+        try {
+            val loadChats = TdApi.GetChats()
+            loadChats.chatList = TdApi.ChatListMain()
+            loadChats.limit = 200
+            tdLibraryManager.execute(loadChats)
+        } catch (e: Exception) {
+            // Non-fatal - fall through to direct GetChat attempts below.
+        }
+
+        val getStorageChat = TdApi.GetChat()
         getStorageChat.chatId = currentSession.storageChannelId
         tdLibraryManager.execute(getStorageChat)
 
         if (currentSession.journalChannelId != 0L) {
-            val getJournalChat = TdApi.GetChat()
-            getJournalChat.chatId = currentSession.journalChannelId
-            tdLibraryManager.execute(getJournalChat)
+            var journalHydrated = false
+            var hydrateAttempts = 0
+            var lastError: Exception? = null
+            while (!journalHydrated && hydrateAttempts < 3) {
+                try {
+                    val getJournalChat = TdApi.GetChat()
+                    getJournalChat.chatId = currentSession.journalChannelId
+                    tdLibraryManager.execute(getJournalChat)
+                    journalHydrated = true
+                } catch (e: Exception) {
+                    lastError = e
+                    hydrateAttempts += 1
+                    delay(400L * hydrateAttempts)
+                }
+            }
+            if (!journalHydrated) {
+                tdLibraryManager.errorFlow.emit(
+                    "DEBUG-HYDRATE: journal chat ${currentSession.journalChannelId} never hydrated after $hydrateAttempts attempts: ${lastError?.message}"
+                )
+            }
         }
     } catch (e: Exception) {
         // If even GetChat fails, the upload would fail anyway - let it proceed

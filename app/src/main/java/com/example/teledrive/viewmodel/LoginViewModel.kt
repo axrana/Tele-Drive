@@ -91,18 +91,29 @@ class LoginViewModel(
     }
 
     private suspend fun handleLoginSuccess() {
-        try {
-            val me = tdLibraryManager.execute(TdApi.GetMe())
-            val localSession = repository.getUserSession().firstOrNull()
+    try {
+        val me = tdLibraryManager.execute(TdApi.GetMe())
+        val localSession = repository.getUserSession().firstOrNull()
 
-            if (localSession == null) {
-                val getChatsQuery = TdApi.GetChats()
-                getChatsQuery.chatList = TdApi.ChatListMain()
-                getChatsQuery.limit = 100
+        // Run the channel setup/repair whenever the session is missing OR
+        // whenever an existing session is missing its journal channel
+        // (this happens for any account created before the journal system
+        // existed - the DB migration defaults journalChannelId to 0, and
+        // that 0 was never being corrected on subsequent logins).
+        val needsJournalRepair = localSession != null && localSession.journalChannelId == 0L
 
-                val chatsResponse = tdLibraryManager.execute(getChatsQuery)
+        if (localSession == null || needsJournalRepair) {
+            val getChatsQuery = TdApi.GetChats()
+            getChatsQuery.chatList = TdApi.ChatListMain()
+            getChatsQuery.limit = 100
+
+            val chatsResponse = tdLibraryManager.execute(getChatsQuery)
+            val chatIds = chatsResponse.chatIds
+
+            val storageChannelId: Long = if (localSession != null && localSession.storageChannelId != 0L) {
+                localSession.storageChannelId
+            } else {
                 var existingChannelId: Long? = null
-                val chatIds = chatsResponse.chatIds
                 if (chatIds != null) {
                     for (id in chatIds) {
                         try {
@@ -117,68 +128,60 @@ class LoginViewModel(
                     }
                 }
 
-                val storageChannelId = if (existingChannelId != null) {
-                    existingChannelId
-                } else {
+                existingChannelId ?: run {
                     val randomDigits = (100000..999999).random()
                     val createQuery = TdApi.CreateNewSupergroupChat()
                     createQuery.title = "My Cloud Storage_$randomDigits"
                     createQuery.isChannel = true
                     createQuery.description = "Storage for TeleDrive"
-
-                    val chat = tdLibraryManager.execute(createQuery)
-                    chat.id
+                    tdLibraryManager.execute(createQuery).id
                 }
-
-                // Search for existing Journal channel
-                var existingJournalId: Long? = null
-                if (chatIds != null) {
-                    for (id in chatIds) {
-                        try {
-                            val getChatQuery = TdApi.GetChat()
-                            getChatQuery.chatId = id
-                            val chat = tdLibraryManager.execute(getChatQuery)
-                            if (chat.title == "TeleDrive Journal") {
-                                existingJournalId = chat.id
-                                break
-                            }
-                        } catch (e: Exception) { e.printStackTrace() }
-                    }
-                }
-
-                val journalChannelId = if (existingJournalId != null) {
-                    existingJournalId
-                } else {
-                    val createJournalQuery = TdApi.CreateNewSupergroupChat()
-                    createJournalQuery.title = "TeleDrive Journal"
-                    createJournalQuery.isChannel = true
-                    createJournalQuery.description = "Journal for TeleDrive metadata"
-                    val chat = tdLibraryManager.execute(createJournalQuery)
-                    chat.id
-                }
-
-                repository.saveSession(
-                    UserSession(
-                        telegramUserId = me.id.toLong(),
-                        phoneNumber = phoneNumber,
-                        username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
-                        firstName = me.firstName ?: "",
-                        lastName = me.lastName ?: "",
-                        channelId = storageChannelId,
-                        channelUsername = null,
-                        storageChannelId = storageChannelId,
-                        storageChannelUsername = null,
-                        journalChannelId = journalChannelId,
-                        journalChannelUsername = null,
-                        isPremium = false,
-                        loginDate = System.currentTimeMillis()
-                    )
-                )
             }
-            _uiState.value = LoginUiState.LoggedIn
-        } catch (e: Exception) {
-            _errorFlow.emit("Login failed: ${e.message}")
-            _uiState.value = LoginUiState.WaitPhoneNumber
+
+            var existingJournalId: Long? = null
+            if (chatIds != null) {
+                for (id in chatIds) {
+                    try {
+                        val getChatQuery = TdApi.GetChat()
+                        getChatQuery.chatId = id
+                        val chat = tdLibraryManager.execute(getChatQuery)
+                        if (chat.title == "TeleDrive Journal") {
+                            existingJournalId = chat.id
+                            break
+                        }
+                    } catch (e: Exception) { e.printStackTrace() }
+                }
+            }
+
+            val journalChannelId = existingJournalId ?: run {
+                val createJournalQuery = TdApi.CreateNewSupergroupChat()
+                createJournalQuery.title = "TeleDrive Journal"
+                createJournalQuery.isChannel = true
+                createJournalQuery.description = "Journal for TeleDrive metadata"
+                tdLibraryManager.execute(createJournalQuery).id
+            }
+
+            repository.saveSession(
+                UserSession(
+                    telegramUserId = me.id.toLong(),
+                    phoneNumber = localSession?.phoneNumber ?: phoneNumber,
+                    username = me.usernames?.activeUsernames?.firstOrNull() ?: "",
+                    firstName = me.firstName ?: "",
+                    lastName = me.lastName ?: "",
+                    channelId = storageChannelId,
+                    channelUsername = null,
+                    storageChannelId = storageChannelId,
+                    storageChannelUsername = null,
+                    journalChannelId = journalChannelId,
+                    journalChannelUsername = null,
+                    isPremium = false,
+                    loginDate = localSession?.loginDate ?: System.currentTimeMillis()
+                )
+            )
         }
+        _uiState.value = LoginUiState.LoggedIn
+    } catch (e: Exception) {
+        _errorFlow.emit("Login failed: ${e.message}")
+        _uiState.value = LoginUiState.WaitPhoneNumber
     }
-}
+    }

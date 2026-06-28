@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import org.drinkless.tdlib.TdApi
 import java.io.File
+import kotlinx.coroutines.withTimeoutOrNull
 
 class UploadWorker(
     context: Context,

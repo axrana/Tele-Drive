@@ -151,20 +151,40 @@ val captionText = if (folderId != -1L) {
             query.inputMessageContent = inputMessage
 
             var message = tdLibraryManager.execute(query)
-var finalAttempts = 0
-// Only wait for the MESSAGE to finish sending (sendingState == null).
-// Do NOT wait on isUploadingCompleted - that flag is unreliable on this TDLib build
-// and can stay false indefinitely even after the file is fully usable.
-while (message.sendingState != null && finalAttempts < 15) {
-    delay(500)
-    val getMsgQuery = TdApi.GetMessage()
-    getMsgQuery.chatId = message.chatId
-    getMsgQuery.messageId = message.id
-    message = tdLibraryManager.execute(getMsgQuery)
-    finalAttempts += 1
-}
 
-progressJob.cancel()
+            // IMPORTANT: TDLib's SendMessage returns a message with a TEMPORARY
+            // local message ID. Once the send completes, TDLib swaps it for a
+            // permanent ID and the old temp ID becomes invalid - a GetMessage
+            // call using the stale temp ID then fails with "404: Not Found".
+            // Polling GetMessage with the original ID is racy: if the send
+            // finishes between polls, the next poll 404s.
+            //
+            // Instead, listen for UpdateMessageSendSucceeded, which carries
+            // both the old temp ID and the finished message with its real ID.
+            if (message.sendingState != null) {
+                val originalTempId = message.id
+                val sentMessage = withTimeoutOrNull(15_000L) {
+                    var result: TdApi.Message? = null
+                    val job = launch {
+                        tdLibraryManager.updateFlow.collect { obj ->
+                            if (obj is TdApi.UpdateMessageSendSucceeded && obj.oldMessageId == originalTempId) {
+                                result = obj.message
+                                throw kotlinx.coroutines.CancellationException("done")
+                            }
+                            if (obj is TdApi.UpdateMessageSendFailed && obj.oldMessageId == originalTempId) {
+                                throw Exception("Send failed: ${obj.error?.message}")
+                            }
+                        }
+                    }
+                    job.join()
+                    result
+                }
+                if (sentMessage != null) {
+                    message = sentMessage
+                }
+            }
+
+            progressJob.cancel()
 
 val docContent = message.content as? TdApi.MessageDocument
     ?: return@coroutineScope Result.failure()
